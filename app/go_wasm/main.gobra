@@ -9,8 +9,8 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/netsec-ethz/fpki/pkg/common"
-	mapCommon "github.com/netsec-ethz/fpki/pkg/mapserver/common"
+	"fpki/pkg/common"
+	mapCommon "fpki/pkg/mapserver/common"
 )
 
 // NOTE: This file contains a lot of commented timing information

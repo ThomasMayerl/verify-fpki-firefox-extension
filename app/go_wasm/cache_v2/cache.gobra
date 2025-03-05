@@ -268,7 +268,10 @@ func verifyChildWithParentCertificate(certificate *x509.Certificate, parentCerti
 	// NOTE: this check only checks whether the certificate is currently valid
 	// (as we treat even non-leaf certificates as leafs here)
 	// this eases error handling, as all errors are x509 specific
-	err := certificate.IsValid(x509.LeafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
+	
+	// TODO:  Was the following line before but these definitions do not exist in Go (isValid and leafCertificate are private)
+	// err := certificate.IsValid(x509.LeafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
+	err := certificate.isValid(x509.leafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -397,7 +400,9 @@ func processCertificate(certificate *x509.Certificate,
 			return processedCertificateHashes, false
 		}
 		// check if currently valid time-wise (hence, treat it as a leaf)
-		err := certificate.IsValid(x509.LeafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
+		// TODO: Was the following before but IsValid and LeafCertificate do not exist (they are private)
+		// err := certificate.IsValid(x509.LeafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
+		err := certificate.isValid(x509.leafCertificate, []*x509.Certificate{}, &x509.VerifyOptions{})
 		if err != nil {
 			if ignoreError(err) {
 				ignoredCertificateHashes[certificateHash] = struct{}{}

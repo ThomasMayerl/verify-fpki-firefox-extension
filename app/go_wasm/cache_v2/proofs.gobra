@@ -9,11 +9,11 @@ import (
 	"log"
 	"sort"
 
-	"github.com/netsec-ethz/fpki/pkg/common"
-	"github.com/netsec-ethz/fpki/pkg/common/crypto"
-	mapCommon "github.com/netsec-ethz/fpki/pkg/mapserver/common"
-	"github.com/netsec-ethz/fpki/pkg/mapserver/trie"
-	"github.com/netsec-ethz/fpki/pkg/util"
+	"fpki/pkg/common"
+	"fpki/pkg/common/crypto"
+	mapCommon "fpki/pkg/mapserver/common"
+	"fpki/pkg/mapserver/trie"
+	"fpki/pkg/util"
 )
 
 type MapServerInfo struct {

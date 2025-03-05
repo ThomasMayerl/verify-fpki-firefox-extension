@@ -60,6 +60,7 @@ type LegacyTrustInfo struct {
 var legacyTrustPreferences = map[string][]*LegacyTrustPreference{}
 
 // initialize legacyTrustPreferences  with a config
+// requires "ca-sets" in configMap
 func InitializeLegacyTrustPreferences(configMap map[string]interface{}) {
 	legacyTrustPreferences = map[string][]*LegacyTrustPreference{}
 
@@ -79,7 +80,7 @@ func InitializeLegacyTrustPreferences(configMap map[string]interface{}) {
 
 	// parse legacy trust preferences
 	legacyTrustPreferencesJSON := configMap["legacy-trust-preference"].(map[string]interface{})
-	for domain, keys := range legacyTrustPreferencesJSON {
+	for domainVar, keys := range legacyTrustPreferencesJSON {
 		domainTrustPreferences := []*LegacyTrustPreference{}
 		objects := keys.([]interface{})
 		for _, object := range objects {
@@ -97,7 +98,7 @@ func InitializeLegacyTrustPreferences(configMap map[string]interface{}) {
 			}
 			domainTrustPreferences = append(domainTrustPreferences, legacyTrustPreference)
 		}
-		legacyTrustPreferences[domain] = domainTrustPreferences
+		legacyTrustPreferences[domainVar] = domainTrustPreferences
 	}
 }
 
@@ -144,13 +145,13 @@ func ComputeChainTrustLevelForDomainAndParents(dnsName string, certificateChain 
 	var relevantCertificateChainIndex int
 	var relevantDomain string
 
-	for _, domain := range generateWildcardAndParentDomain(dnsName) {
-		currentTrustLevel, currentRelevantCASetID, currentRelevantCertificateChainIndex, trustPreferenceFound := ComputeChainTrustLevelForDomain(domain, certificateChain)
+	for _, domainVar := range generateWildcardAndParentDomain(dnsName) {
+		currentTrustLevel, currentRelevantCASetID, currentRelevantCertificateChainIndex, trustPreferenceFound := ComputeChainTrustLevelForDomain(domainVar, certificateChain)
 		if trustPreferenceFound {
 			trustLevel = currentTrustLevel
 			relevantCASetID = currentRelevantCASetID
 			relevantCertificateChainIndex = currentRelevantCertificateChainIndex
-			relevantDomain = domain
+			relevantDomain = domainVar
 			break
 		}
 	}
@@ -288,14 +289,18 @@ func checkIfConstraintsSatisfied(certificateChain []*x509.Certificate) error {
 	// check leaf
 	leaf := certificateChain[0]
 	verifyOpts := &x509.VerifyOptions{}
-	err := leaf.IsValid(x509.LeafCertificate, []*x509.Certificate{}, verifyOpts)
+	// TODO: IsValid and LeafCertificate do not exist (they are private declarations), was like this before:
+	// err := leaf.IsValid(x509.LeafCertificate, []*x509.Certificate{}, verifyOpts)
+	err := leaf.isValid(x509.leafCertificate, []*x509.Certificate{}, verifyOpts)
 	if err != nil {
 		return err
 	}
 
 	// check intermediates
 	for i := 1; i < len(certificateChain)-1; i++ {
-		err = certificateChain[i].IsValid(x509.IntermediateCertificate, certificateChain[:i], verifyOpts)
+		// TODO: Just like above. Was like this before:
+		// err = certificateChain[i].IsValid(x509.IntermediateCertificate, certificateChain[:i], verifyOpts)
+		err = certificateChain[i].isValid(x509.intermediateCertificate, certificateChain[:i], verifyOpts)
 		if err != nil {
 			return err
 		}
@@ -303,7 +308,9 @@ func checkIfConstraintsSatisfied(certificateChain []*x509.Certificate) error {
 
 	// check root
 	root := certificateChain[len(certificateChain)-1]
-	err = root.IsValid(x509.RootCertificate, certificateChain[:len(certificateChain)-1], verifyOpts)
+	// TODO: Just like above. Was like this before:
+	// err = root.IsValid(x509.RootCertificate, certificateChain[:len(certificateChain)-1], verifyOpts)
+	err = root.isValid(x509.rootCertificate, certificateChain[:len(certificateChain)-1], verifyOpts)
 	if err != nil {
 		return err
 	}
@@ -320,7 +327,9 @@ func checkSubjectSKI(certificate *x509.Certificate, certificateChains []*Certifi
 
 				// check if the certificate chain is valid
 				keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
-				if !x509.CheckChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
+				// TODO: Just like above. Also private. Was like this before:
+				// if !x509.CheckChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
+				if !x509.checkChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
 					return false
 				}
 				err := checkIfConstraintsSatisfied(certificateChainInfo.certificateChain)
@@ -393,7 +402,9 @@ func VerifyLegacy(connectionTrustInfoToVerify *LegacyTrustInfo) {
 		for _, certificateChainInfo := range certificateChains {
 
 			// check key usage of the certificate chain
-			if !x509.CheckChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
+			// TODO: Just like above. Was like this before
+			// if !x509.CheckChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
+			if !x509.checkChainForKeyUsage(certificateChainInfo.certificateChain, keyUsages) {
 				removedChains = true
 				continue
 			}

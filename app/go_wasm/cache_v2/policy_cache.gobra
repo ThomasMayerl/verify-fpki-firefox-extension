@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netsec-ethz/fpki/pkg/common"
-	"github.com/netsec-ethz/fpki/pkg/common/crypto"
-	"github.com/netsec-ethz/fpki/pkg/util"
+	"fpki/pkg/common"
+	"fpki/pkg/common/crypto"
+	"fpki/pkg/util"
 )
 
 // TODO: integrate map server proof validation

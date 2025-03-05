@@ -52,6 +52,10 @@ func ValidityPeriod(years int,
 // time.Now() + the specified years, months, days, hours.
 // If parent is nil, the issuer and the subject will be
 // equivalent.
+requires len(dnsNames) >= 1 && acc(&dnsNames[0])
+requires acc(parent)
+ensures acc(&dnsNames[0])
+ensures acc(parent)
 func CreateCertificateTemplate(serialNr *big.Int,
 	dnsNames []string,
 	years int,
@@ -123,41 +127,64 @@ func CreateCertificate(template *x509.Certificate,
 	return pem, nil
 }
 
+requires forall k int :: 0 <= k && k < len(times) ==> acc(&times[k])
+ensures forall k int :: 0 <= k && k < len(times) ==> acc(&times[k])
 func maxTime(times ...time.Time) (maxTime time.Time) {
-	for i, t := range times {
-		if i == 0 || t.After(maxTime) {
-			maxTime = t
+	// TODO: Needed for Gobra because Gobra cannot deal with ranges over variadic parameters?
+	// Was like this before:
+	// for i, t := range times {
+	invariant 0 <= i && i <= len(times)
+	invariant forall k int :: 0 <= k && k < len(times) ==> acc(&times[k])
+	for i := 0; i < len(times); i++ {
+		if i == 0 || times[i].After(maxTime) { // times[i] was t before
+			maxTime = times[i] // times[i] was t before
 		}
 	}
 	return
 }
 
-func TransformListToInterfaceType[T any](list []T) []interface{} {
+// TODO: Was generic before. Could be that this does not work
+requires forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
+ensures forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
+func TransformListToInterfaceType(list []any) []interface{} {
 	t := make([]interface{}, len(list))
+	invariant forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
+	invariant forall k int :: 0 <= k && k < len(t) ==> acc(&t[k])
 	for i, e := range list {
 		t[i] = e
 	}
 	return t
 }
 
-func TransformNestedListsToInterfaceType[T any](list [][]T) []interface{} {
+// TODO: Was generic before. Could be that this does not work
+requires forall k int :: 0 <= k && k < len(list) ==> acc(&list[k]) && forall j int :: 0 <= j && j < len(list[k]) ==> acc(&list[k][j])
+ensures forall k int :: 0 <= k && k < len(list) ==> acc(&list[k]) && forall j int :: 0 <= j && j < len(list[k]) ==> acc(&list[k][j])
+func TransformNestedListsToInterfaceType(list [][]any) []interface{} {
 	t := make([]interface{}, len(list))
+	invariant forall k int :: 0 <= k && k < len(list) ==> acc(&list[k]) && forall j int :: 0 <= j && j < len(list[k]) ==> acc(&list[k][j])
+	invariant forall k int :: 0 <= k && k < len(t) ==> acc(&t[k])
 	for i, e := range list {
 		ti := make([]interface{}, len(e))
+		invariant forall j int :: 0 <= j && j < len(e) ==> acc(&e[j])
+		invariant forall k int :: 0 <= k && k < len(ti) ==> acc(&ti[k])
 		for j, ej := range e {
 			ti[j] = ej
-		}
+		}	
 		t[i] = ti
 	}
 	return t
 }
 
+requires forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
+ensures forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
 func SliceToSet(slice []string) map[string]struct{} {
-	set := make(map[string]struct{})
+	setVar := make(map[string]struct{})
+	invariant forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
+	invariant acc(setVar)
 	for _, e := range slice {
-		set[e] = struct{}{}
+		setVar[e] = struct{}{}
 	}
-	return set
+	return setVar
 }
 
 // compute the base64 encoded hash of the base64 encoded payload
