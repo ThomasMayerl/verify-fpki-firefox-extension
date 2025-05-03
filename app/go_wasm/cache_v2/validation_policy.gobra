@@ -886,7 +886,75 @@ pred acc_trustInfo(trustInfo *PolicyTrustInfo, perms perm) {
 	len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) &&
 	acc(policyDnsNameCache, _) && 
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache))
-	//len(trustInfo.DNSName) > 0 // s.t. precondition of findPolicyCertificateChainForDomain is fulfilled 
+}
+
+ghost 
+requires perms > 0
+requires oldLen >= 0
+requires oldLen + len(chainPolicies) == len(trustInfoPolicies)
+requires forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+requires forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc(&chainPolicies[k])
+requires forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> trustInfoPolicies[k] == chainPolicies[k - oldLen]
+requires forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms, chain)
+requires forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+ensures forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+ensures forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc(&chainPolicies[k])
+ensures forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> trustInfoPolicies[k] == chainPolicies[k - oldLen]
+ensures forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+ensures forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms / 2, chain)
+ensures forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms / 2)
+decreases 
+func halveTrustInfoApplicableChainPermissions(trustInfoPolicies []*common.PolicyCertificate, chainPolicies []*common.PolicyCertificate, chain *PolicyCertificateChain, oldLen int, perms perm) {
+	invariant perms > 0
+	invariant oldLen >= 0
+	invariant oldLen + len(chainPolicies) == len(trustInfoPolicies)
+	invariant oldLen <= i && i <= len(trustInfoPolicies)
+	invariant forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+	invariant forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc(&chainPolicies[k])
+	invariant forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> trustInfoPolicies[k] == chainPolicies[k - oldLen]
+	invariant forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+	invariant forall k int :: {&chainPolicies[k]} i - oldLen <= k && k < len(chainPolicies) ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms, chain)
+	invariant forall k int :: {&chainPolicies[k]} 0 <= k && k < i - oldLen ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms / 2, chain)
+	invariant forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < i ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms / 2)
+	decreases len(trustInfoPolicies) - i
+	for i := oldLen; i < len(trustInfoPolicies); i++ {
+		unfold acc_inj_chainCertificate(chainPolicies[i - oldLen], len(chainPolicies) - (i - oldLen) - 1, perms, chain)
+		fold acc_inj_chainCertificate(chainPolicies[i - oldLen], len(chainPolicies) - (i - oldLen) - 1, perms / 2, chain)
+		fold acc_inj_trustInfo_policy(trustInfoPolicies[i], i, perms / 2)
+	}
+}
+
+ghost
+decreases
+requires perms > 0
+requires oldLen >= 0
+requires oldLen + len(chainPolicies) == len(trustInfoPolicies)
+requires forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+requires forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc(&chainPolicies[k])
+requires forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> trustInfoPolicies[k] == chainPolicies[k - oldLen]
+requires forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+requires forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms / 2, chain)
+requires forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms / 2)
+ensures forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+ensures forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+func combiningTrustInfoApplicableChainPermissions(trustInfoPolicies []*common.PolicyCertificate, chainPolicies []*common.PolicyCertificate, chain *PolicyCertificateChain, oldLen int, perms perm) {
+	invariant perms > 0
+	invariant oldLen >= 0
+	invariant oldLen + len(chainPolicies) == len(trustInfoPolicies)
+	invariant oldLen <= i && i <= len(trustInfoPolicies)
+	invariant forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < len(trustInfoPolicies) ==> acc(&trustInfoPolicies[k])
+	invariant forall k int :: {&chainPolicies[k]} 0 <= k && k < len(chainPolicies) ==> acc(&chainPolicies[k])
+	invariant forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < len(trustInfoPolicies) ==> trustInfoPolicies[k] == chainPolicies[k - oldLen]
+	invariant forall k int :: {&trustInfoPolicies[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+	invariant forall k int :: {&trustInfoPolicies[k]} i <= k && k < len(trustInfoPolicies) ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms / 2)
+	invariant forall k int :: {&chainPolicies[k]} i - oldLen <= k && k < len(chainPolicies) ==> acc_inj_chainCertificate(chainPolicies[k], len(chainPolicies) - k - 1, perms / 2, chain)
+	invariant forall k int :: {&trustInfoPolicies[k]} oldLen <= k && k < i ==> acc_inj_trustInfo_policy(trustInfoPolicies[k], k, perms)
+	decreases len(trustInfoPolicies) - i
+	for i := oldLen; i < len(trustInfoPolicies); i++ {
+		unfold acc_inj_chainCertificate(chainPolicies[i - oldLen], len(chainPolicies) - (i - oldLen) - 1, perms / 2, chain)
+		unfold acc_inj_trustInfo_policy(trustInfoPolicies[i], i, perms / 2)
+		fold acc_inj_trustInfo_policy(trustInfoPolicies[i], i, perms)
+	}
 }
 
 // Evaluate whether connection should be allowed according to
@@ -950,42 +1018,56 @@ func VerifyPolicy(trustInfo *PolicyTrustInfo, ghost inPerms perm) (err error, gh
 	fmt.Printf("applicable chain: %+v\n", applicableChain)
 	unfold acc_policyCertificateChain(applicableChain, outPerms)
 
-	certs := applicableChain.PolicyCertificates
+	ghost oldLen := len(trustInfo.PolicyChain)
+	trustInfo.PolicyChain = append(perm(1/2), trustInfo.PolicyChain, applicableChain.PolicyCertificates...) 
+	ghost halveTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
+
+	certs := applicableChain.PolicyCertificates // TODO Does not work without temporary var?
 
 	// extract policies and validate certificate based on extracted policies
 	rootCertificate := trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1].Subject.ToRDNSequence().String()
 
-	fold acc_trustInfo(trustInfo, outPerms)
+	invariant acc(trustInfo)
+	invariant forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc(&trustInfo.ConflictingPolicyAttributes[k])
+	invariant forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc_inj_trustInfo_conflictingPolicyAttributes_attr(trustInfo.ConflictingPolicyAttributes[k], k)
+	invariant forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc(&trustInfo.PolicyChain[k])
+	invariant len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1])
+	invariant acc(policyDnsNameCache, _) 
+	invariant let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache))
 	invariant acc(policyDnsNameCache, _)
 	invariant outPerms <= inPerms
 	invariant outPerms == old(outPerms)
 	invariant outPerms > 0
-	invariant acc_trustInfo(trustInfo, outPerms)
 	invariant acc_policyDnsNameCache()
 	invariant acc_policyCache(outPerms)
 	invariant acc(applicableChain)
 	invariant certs === applicableChain.PolicyCertificates
 	invariant len(certs) >= 1
 	invariant (forall l int :: {&certs[l]} 0 <= l && l < len(certs) ==> acc(&certs[l]))
-	invariant (forall l int :: {&certs[l]} 0 <= l && l < len(certs) ==> acc_inj_chainCertificate(certs[l], len(certs) - l - 1, outPerms, applicableChain))
+	invariant (forall l int :: {&certs[l]} 0 <= l && l < len(certs) ==> acc_inj_chainCertificate(certs[l], len(certs) - l - 1, outPerms / 2, applicableChain))
+	invariant oldLen >= 0
+	invariant oldLen + len(applicableChain.PolicyCertificates) == len(trustInfo.PolicyChain)
+	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> trustInfo.PolicyChain[k] == certs[k - oldLen]
+	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, outPerms / 2)
+	invariant forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, outPerms)
 	invariant 0 <= idx && idx <= len(certs)
 	decreases len(certs) - i0
 	for idx, policyCert := range certs with i0 {
 	//for idx := 0; idx < len(applicableChain.PolicyCertificates); idx++ {
-		unfold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms, applicableChain)
+		unfold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
 
 		policyCert := applicableChain.PolicyCertificates[idx]
 
 		err := policyCert.PolicyAttributes.ValidateAttributes()
 		if err != nil {
 			dom := policyCert.Domain()
-			fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms, applicableChain)
+			fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
+			combiningTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
+			fold acc_trustInfo(trustInfo, outPerms)
 			return fmt.Errorf("Failed to validate attributes for domain %s: %s", dom, err), outPerms
-			//return fmt.Errorf("Failed to validate attributes for domain %s: %s", policyCert.Domain(), err), outPerms
 		}
 		// check for the status of the subdomains
 		policyCertDomain := normalizeDomain(policyCert.Domain())
-		unfold acc_trustInfo(trustInfo, outPerms)
 		domainValidity := policyCert.PolicyAttributes.CheckDomainValidity(policyCertDomain, trustInfo.DNSName)
 		// check if the domain should not consider policies
 		if idx == 0 && domainValidity == common.PolicyAttributeDomainExcluded {
@@ -1011,41 +1093,9 @@ func VerifyPolicy(trustInfo *PolicyTrustInfo, ghost inPerms perm) (err error, gh
 				fold acc_inj_trustInfo_conflictingPolicyAttributes_attr(confAttr, len(trustInfo.ConflictingPolicyAttributes) - 1)
 			}
 		}
-		fold acc_trustInfo(trustInfo, outPerms)
-		fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms, applicableChain)
+		fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
 	}
-	unfold acc_trustInfo(trustInfo, outPerms)
-	// TODO THIS WAS BEFORE LOOP BUT THEN WE HAVE PROBLEMS BECAUSE LOOP ALSO USES APPLICABLECHAIN -> FIX LATER!
-	ghost oldLen := len(trustInfo.PolicyChain)
-	trustInfo.PolicyChain = append(perm(1/2), trustInfo.PolicyChain, applicableChain.PolicyCertificates...) 
-	ghost
-	invariant outPerms <= inPerms
-	invariant oldLen >= 0
-	invariant oldLen == old(oldLen)
-	invariant acc(trustInfo)
-	invariant oldLen <= i && i <= len(trustInfo.PolicyChain)
-	invariant acc(applicableChain)
-	invariant oldLen + len(applicableChain.PolicyCertificates) == len(trustInfo.PolicyChain)
-	invariant forall k int :: {&applicableChain.PolicyCertificates[k]} 0 <= k && k < len(applicableChain.PolicyCertificates) ==> acc(&applicableChain.PolicyCertificates[k])
-	invariant forall k int :: {&applicableChain.PolicyCertificates[k]} i - oldLen <= k && k < len(applicableChain.PolicyCertificates) ==> acc_inj_chainCertificate(applicableChain.PolicyCertificates[k], len(applicableChain.PolicyCertificates) - k - 1, outPerms, applicableChain)
-	invariant forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc(&trustInfo.PolicyChain[k])
-	invariant forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < i ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, outPerms)
-	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> trustInfo.PolicyChain[k] == applicableChain.PolicyCertificates[k - oldLen]
-	invariant outPerms == old(outPerms)
-	invariant forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc(&trustInfo.ConflictingPolicyAttributes[k])
-	invariant forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc_inj_trustInfo_conflictingPolicyAttributes_attr(trustInfo.ConflictingPolicyAttributes[k], k)
-	invariant len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1])
-	invariant acc(policyDnsNameCache, _) && let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache))
-	decreases len(trustInfo.PolicyChain) - i
-	for i := oldLen; i < len(trustInfo.PolicyChain); i++ {
-		unfold acc_inj_chainCertificate(applicableChain.PolicyCertificates[i - oldLen], len(applicableChain.PolicyCertificates) - (i - oldLen) - 1, outPerms, applicableChain)
-		fold acc_inj_trustInfo_policy(trustInfo.PolicyChain[i], i, outPerms)
-	}
-	if len(trustInfo.ConflictingPolicyAttributes) > 0 {
-		trustInfo.EvaluationResult = 0
-	} else {
-		trustInfo.EvaluationResult = 1
-	}
+	ghost combiningTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
 	fold acc_trustInfo(trustInfo, outPerms)
 	return nil, outPerms
 }
