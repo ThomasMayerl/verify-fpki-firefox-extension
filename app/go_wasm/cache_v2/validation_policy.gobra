@@ -1022,8 +1022,6 @@ func VerifyPolicy(trustInfo *PolicyTrustInfo, ghost inPerms perm) (err error, gh
 	trustInfo.PolicyChain = append(perm(1/2), trustInfo.PolicyChain, applicableChain.PolicyCertificates...) 
 	ghost halveTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
 
-	certs := applicableChain.PolicyCertificates // TODO Does not work without temporary var?
-
 	// extract policies and validate certificate based on extracted policies
 	rootCertificate := trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1].Subject.ToRDNSequence().String()
 
@@ -1041,27 +1039,25 @@ func VerifyPolicy(trustInfo *PolicyTrustInfo, ghost inPerms perm) (err error, gh
 	invariant acc_policyDnsNameCache()
 	invariant acc_policyCache(outPerms)
 	invariant acc(applicableChain)
-	invariant certs === applicableChain.PolicyCertificates
-	invariant len(certs) >= 1
-	invariant (forall l int :: {&certs[l]} 0 <= l && l < len(certs) ==> acc(&certs[l]))
-	invariant (forall l int :: {&certs[l]} 0 <= l && l < len(certs) ==> acc_inj_chainCertificate(certs[l], len(certs) - l - 1, outPerms / 2, applicableChain))
+	invariant len(applicableChain.PolicyCertificates) >= 1
+	invariant (forall l int :: {&applicableChain.PolicyCertificates[l]} 0 <= l && l < len(applicableChain.PolicyCertificates) ==> acc(&applicableChain.PolicyCertificates[l]))
+	invariant (forall l int :: {&applicableChain.PolicyCertificates[l]} 0 <= l && l < len(applicableChain.PolicyCertificates) ==> acc_inj_chainCertificate(applicableChain.PolicyCertificates[l], len(applicableChain.PolicyCertificates) - l - 1, outPerms / 2, applicableChain))
 	invariant oldLen >= 0
 	invariant oldLen + len(applicableChain.PolicyCertificates) == len(trustInfo.PolicyChain)
-	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> trustInfo.PolicyChain[k] == certs[k - oldLen]
+	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> trustInfo.PolicyChain[k] == applicableChain.PolicyCertificates[k - oldLen]
 	invariant forall k int :: {&trustInfo.PolicyChain[k]} oldLen <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, outPerms / 2)
 	invariant forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < oldLen ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, outPerms)
-	invariant 0 <= idx && idx <= len(certs)
-	decreases len(certs) - i0
-	for idx, policyCert := range certs with i0 {
-	//for idx := 0; idx < len(applicableChain.PolicyCertificates); idx++ {
-		unfold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
-
+	invariant 0 <= idx && idx <= len(applicableChain.PolicyCertificates)
+	decreases len(applicableChain.PolicyCertificates) - idx//i0
+	//for idx, policyCert := range applicableChain.PolicyCertificates with i0 {
+	for idx := 0; idx < len(applicableChain.PolicyCertificates); idx++ {
 		policyCert := applicableChain.PolicyCertificates[idx]
+		unfold acc_inj_chainCertificate(applicableChain.PolicyCertificates[idx/*i0*/], len(applicableChain.PolicyCertificates) - idx/*i0*/ - 1, outPerms / 2, applicableChain)
 
 		err := policyCert.PolicyAttributes.ValidateAttributes()
 		if err != nil {
 			dom := policyCert.Domain()
-			fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
+			fold acc_inj_chainCertificate(applicableChain.PolicyCertificates[idx/*i0*/], len(applicableChain.PolicyCertificates) - idx/*i0*/ - 1, outPerms / 2, applicableChain)
 			combiningTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
 			fold acc_trustInfo(trustInfo, outPerms)
 			return fmt.Errorf("Failed to validate attributes for domain %s: %s", dom, err), outPerms
@@ -1093,7 +1089,7 @@ func VerifyPolicy(trustInfo *PolicyTrustInfo, ghost inPerms perm) (err error, gh
 				fold acc_inj_trustInfo_conflictingPolicyAttributes_attr(confAttr, len(trustInfo.ConflictingPolicyAttributes) - 1)
 			}
 		}
-		fold acc_inj_chainCertificate(certs[i0], len(certs) - i0 - 1, outPerms / 2, applicableChain)
+		fold acc_inj_chainCertificate(applicableChain.PolicyCertificates[idx/*i0*/], len(applicableChain.PolicyCertificates) - idx/*i0*/ - 1, outPerms / 2, applicableChain)
 	}
 	ghost combiningTrustInfoApplicableChainPermissions(trustInfo.PolicyChain, applicableChain.PolicyCertificates, applicableChain, oldLen, outPerms)
 	fold acc_trustInfo(trustInfo, outPerms)
