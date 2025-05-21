@@ -6,53 +6,6 @@ import (
     "net/publicsuffix"
 )
 
-/*
-ghost 
-requires acc(immutablePolicyCache, _)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(immutablePolicyCache) && res[str] == immutablePolicyCache[str]
-ensures forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> str in domain(res) && res[str] == immutablePolicyCache[str]
-decreases
-pure func dictI(immutablePolicyCache map[string]*ImmutablePolicyCacheEntry) (res dict[string]*ImmutablePolicyCacheEntry) 
-
-ghost 
-requires acc(policyCache, _)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(policyCache) && res[str] == policyCache[str]
-ensures forall str string :: {policyCache[str]} str in domain(policyCache) ==> str in domain(res) && res[str] == policyCache[str]
-decreases
-pure func dictP(policyCache map[string]*PolicyCacheEntry) (res dict[string]*PolicyCacheEntry) 
-
-ghost 
-requires acc(policyDnsNameCache, _)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(policyDnsNameCache) && res[str] === policyDnsNameCache[str]
-ensures forall str string :: {policyDnsNameCache[str]} str in domain(policyDnsNameCache) ==> str in domain(res) && res[str] === policyDnsNameCache[str]
-decreases
-pure func dictD(policyDnsNameCache map[string][]string) (res dict[string][]string)*/
-
-/*
-ghost 
-requires acc(immutablePolicyCache, _)
-ensures len(immutablePolicyCache) == len(res)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(immutablePolicyCache) && res[str] == immutablePolicyCache[str]
-ensures forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> str in domain(res) && res[str] == immutablePolicyCache[str]
-decreases
-pure func ImmutablePolicyCacheView(immutablePolicyCache map[string]*ImmutablePolicyCacheEntry) (res dict[string]*ImmutablePolicyCacheEntry) 
-
-ghost 
-requires acc(policyCache, _)
-ensures len(policyCache) == len(res)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(policyCache) && res[str] == policyCache[str]
-ensures forall str string :: {policyCache[str]} str in domain(policyCache) ==> str in domain(res) && res[str] == policyCache[str]
-decreases
-pure func PolicyCacheView(policyCache map[string]*PolicyCacheEntry) (res dict[string]*PolicyCacheEntry) 
-
-ghost 
-requires acc(policyDnsNameCache, _)
-ensures len(policyDnsNameCache) == len(res)
-ensures forall str string :: {res[str]} str in domain(res) ==> str in domain(policyDnsNameCache) && res[str] === policyDnsNameCache[str]
-ensures forall str string :: {policyDnsNameCache[str]} str in domain(policyDnsNameCache) ==> str in domain(res) && res[str] === policyDnsNameCache[str]
-decreases
-pure func PolicyDnsNameCacheView(policyDnsNameCache map[string][]string) (res dict[string][]string) */
-
 pred acc_leafHashes(hashes []string) {
 	forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], _)
 }
@@ -80,33 +33,6 @@ pred ImmutablePolicyCachePermissions(ghost immutablePolicyCache dict[string]*Imm
     acc(immutablePolicyCache[str], cachePerms) &&
     ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)
 }
-
-/*
-ghost
-requires ImmutablePolicyCachePermissions(immutablePolicyCache, cachePerms)
-decreases
-pure func ImmutablePolicyCacheInvariant(immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, cachePerms perm) bool {
-    return unfolding ImmutablePolicyCachePermissions(immutablePolicyCache, cachePerms) in immutablePolicyCacheInvariant(immutablePolicyCache, policyCache)
-}
-
-ghost
-opaque 
-requires forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> acc(immutablePolicyCache[str]) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str)
-decreases
-pure func immutablePolicyCacheInvariant(immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry) bool {
-    return forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> 
-    len(immutablePolicyCache[str].policyHashes) > 0 &&
-    (unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str) in immutablePolicyCacheInvariant_policyHashes(immutablePolicyCache[str].policyHashes, policyCache))
-}
-
-ghost
-opaque
-requires forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k])
-decreases
-pure func immutablePolicyCacheInvariant_policyHashes(hashes []string, policyCache dict[string]*PolicyCacheEntry) bool {
-    return forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> hashes[k] in domain(policyCache)
-}
-*/
 
 pred PolicyCachePermissions(ghost policyCache dict[string]*PolicyCacheEntry, ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, ghost policyDnsNameCache dict[string][]string, ghost perms perm) {
     perms > 0 &&
@@ -136,34 +62,6 @@ pred acc_policyCertificateChain(chain *PolicyCertificateChain, ghost policyDnsNa
 pred acc_inj_policyCertificateChain(chain *PolicyCertificateChain, i int, ghost policyDnsNameCache dict[string][]string, ghost perms perm) {
 	acc_policyCertificateChain(chain, policyDnsNameCache, perms)
 }
-
-/*
-ghost 
-requires perms > 0
-requires PolicyCachePermissions(policyCache, perms)
-decreases
-pure func PolicyCacheInvariant(policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm) bool {
-    return unfolding PolicyCachePermissions(policyCache, perms) in policyCacheInvariant(policyCache, policyDnsNameCache, perms)
-}
-
-ghost
-opaque
-requires perms > 0
-requires forall str string :: {policyCache[str]} str in domain(policyCache) ==> acc(policyCache[str]) && cache_policyHashes_policy(policyCache[str].policy, str, perms)
-decreases
-pure func policyCacheInvariant(policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm) bool {
-    return forall str string :: {policyCache[str]} str in domain(policyCache) ==> (unfolding cache_policyHashes_policy(policyCache[str].policy, str, perms) in policyCacheInvariant_policy(policyCache[str].policy, policyDnsNameCache, perms))
-} 
-
-ghost 
-opaque 
-requires perms > 0
-requires acc(policy, perms)
-decreases
-pure func policyCacheInvariant_policy(policy *common.PolicyCertificate, policyDnsNameCache dict[string][]string, perms perm) bool {
-    return policy.Domain() in domain(policyDnsNameCache)
-}*/
-
 
 pred acc_inj_trustInfo_policy(policy *common.PolicyCertificate, i int, ghost perms perm) {
 	perms > 0 && acc(policy, perms)
