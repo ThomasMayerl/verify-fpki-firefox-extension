@@ -61,7 +61,8 @@ var legacyTrustPreferences = map[string][]*LegacyTrustPreference{}
 
 // initialize legacyTrustPreferences  with a config
 // requires "ca-sets" in configMap
-func InitializeLegacyTrustPreferences(configMap map[string]interface{}) {
+// TODO verify once Gobra supports global variables better
+func InitializeLegacyTrustPreferences(configMap map[string]interface{}) /*{
 	legacyTrustPreferences = map[string][]*LegacyTrustPreference{}
 
 	// parse CA sets
@@ -100,8 +101,8 @@ func InitializeLegacyTrustPreferences(configMap map[string]interface{}) {
 		}
 		legacyTrustPreferences[domainVar] = domainTrustPreferences
 	}
-}
-
+}*/
+/*
 // compute the trust level of a single certificate for a domain (dnsName)
 func ComputeSingleCertificateTrustLevelForDomain(dnsName string, certificate *x509.Certificate) int {
 	trustLevel := 0
@@ -130,8 +131,9 @@ func generateWildcardAndParentDomain(dnsName string) []string {
 	components := strings.Split(dnsNameNormalized, ".")
 	orderedParentDomains := make([]string, 2*len(components))
 	for from := range components {
-		orderedParentDomains = append(orderedParentDomains, strings.Join(components[from:], "."))
-		orderedParentDomains = append(orderedParentDomains, strings.Join(append([]string{"*"}, components[from+1:]...), "."))
+		// TODO Unsure about perm(1)
+		orderedParentDomains = append(perm(1), orderedParentDomains, strings.Join(components[from:], "."))
+		orderedParentDomains = append(perm(1), orderedParentDomains, strings.Join(append(perm(1), []string{"*"}, components[from+1:]...), "."))
 	}
 	return orderedParentDomains
 }
@@ -222,13 +224,14 @@ func GetHighestTrustLevelCertificateChains(dnsName string, certificateChains []*
 
 			var currentSubjects []string
 			for _, cert := range certificateChainInfo.certificateChain {
-				currentSubjects = append(currentSubjects, cert.Subject.String())
+				// TODO Unsure about perm(1) - in the next few appends
+				currentSubjects = append(perm(1), currentSubjects, cert.Subject.String())
 			}
 			chainCertificateSubjects = [][]string{currentSubjects}
 
 			var currentHashes []string
 			for _, cert := range certificateChainInfo.certificateChain {
-				currentHashes = append(currentHashes, GetRawCertificateHash(cert))
+				currentHashes = append(perm(1), currentHashes, GetRawCertificateHash(cert))
 			}
 			chainCertificateHashes = [][]string{currentHashes}
 
@@ -238,21 +241,21 @@ func GetHighestTrustLevelCertificateChains(dnsName string, certificateChains []*
 				minNotAfterTsd = notAfter
 			}
 		} else if currentTrustLevel == highestTrustLevel {
-			highestTrustCertificateChains = append(highestTrustCertificateChains, certificateChainInfo)
-			relevantCASetIDs = append(relevantCASetIDs, relevantCASetID)
-			relevantCertificateChainIndices = append(relevantCertificateChainIndices, relevantCertificateChainIndex)
+			highestTrustCertificateChains = append(perm(1), highestTrustCertificateChains, certificateChainInfo)
+			relevantCASetIDs = append(perm(1), relevantCASetIDs, relevantCASetID)
+			relevantCertificateChainIndices = append(perm(1), relevantCertificateChainIndices, relevantCertificateChainIndex)
 
 			var currentSubjects []string
 			for _, cert := range certificateChainInfo.certificateChain {
-				currentSubjects = append(currentSubjects, cert.Subject.String())
+				currentSubjects = append(perm(1), currentSubjects, cert.Subject.String())
 			}
-			chainCertificateSubjects = append(chainCertificateSubjects, currentSubjects)
+			chainCertificateSubjects = append(perm(1), chainCertificateSubjects, currentSubjects)
 
 			var currentHashes []string
 			for _, cert := range certificateChainInfo.certificateChain {
-				currentHashes = append(currentHashes, GetRawCertificateHash(cert))
+				currentHashes = append(perm(1), currentHashes, GetRawCertificateHash(cert))
 			}
-			chainCertificateHashes = append(chainCertificateHashes, currentHashes)
+			chainCertificateHashes = append(perm(1), chainCertificateHashes, currentHashes)
 
 			notAfter := certificateChainInfo.certificateChain[0].NotAfter
 			if notAfter.Before(minNotAfterTsd) {
@@ -415,12 +418,13 @@ func VerifyLegacy(connectionTrustInfoToVerify *LegacyTrustInfo) {
 			if certificateChainInfo.constraintsApply {
 				err := checkIfConstraintsSatisfied(certificateChainInfo.certificateChain)
 				if err == nil {
-					certificateChainsPruned = append(certificateChainsPruned, certificateChainInfo)
+					// TODO unsure about perm(1) here and in next append
+					certificateChainsPruned = append(perm(1), certificateChainsPruned, certificateChainInfo)
 				} else {
 					removedChains = true
 				}
 			} else {
-				certificateChainsPruned = append(certificateChainsPruned, certificateChainInfo)
+				certificateChainsPruned = append(perm(1), certificateChainsPruned, certificateChainInfo)
 			}
 		}
 
@@ -448,3 +452,4 @@ func NewLegacyTrustInfo(dnsName string, certificateChain []*x509.Certificate) *L
 	legacyTrustInfo.ConnectionTrustLevelChainIndex = relevantCertificateChainIndex
 	return legacyTrustInfo
 }
+*/

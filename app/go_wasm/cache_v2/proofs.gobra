@@ -57,14 +57,17 @@ type ProofCacheEntry struct {
 	lastError error
 }
 
+preserves acc(e)
 func (e *ProofCacheEntry) Evaluated() bool {
 	return e.evaluated
 }
 
+preserves acc(e)
 func (e *ProofCacheEntry) Result() bool {
 	return e.result
 }
 
+preserves acc(e)
 func (e *ProofCacheEntry) LastError() error {
 	return e.lastError
 }
@@ -75,7 +78,9 @@ var mapserverInfoCache = map[string]*MapServerInfo{}
 // cache mapping base64 encoded (leaf hash + map server identifier) to a ProofCacheEntry
 var proofCache = map[string]*ProofCacheEntry{}
 
-func InitializeMapserverInfoCache(configMap map[string]interface{}) bool {
+ensures acc(mapserverInfoCache)
+ensures acc(proofCache) && len(proofCache) == 0
+func InitializeMapserverInfoCache(configMap map[string]interface{}) bool /*{
 	mapserverInfoCache = map[string]*MapServerInfo{}
 	proofCache = map[string]*ProofCacheEntry{}
 
@@ -99,9 +104,11 @@ func InitializeMapserverInfoCache(configMap map[string]interface{}) bool {
 	fmt.Printf("Added %d map servers: %s\n", len(identities), identities)
 	return true
 }
-
+*/
 // MHT proof verifications are cached to ensure they only need to be verified once.
 // The key is calculated as follows: hash(hash(domain), hash(leaf), mapserverID)
+preserves forall k int :: {&proofKey[k]} 0 <= k && k < len(proofKey) ==> acc(&proofKey[k])
+preserves forall k int :: {&leafHash[k]} 0 <= k && k < len(leafHash) ==> acc(&leafHash[k])
 func GetProofCacheKey(proofKey []byte, leafHash []byte, mapserverID string) (string, error) {
 	h := sha256.New()
 	_, err := h.Write(proofKey)
@@ -121,10 +128,15 @@ func GetProofCacheKey(proofKey []byte, leafHash []byte, mapserverID string) (str
 }
 
 // add a new cache entry for this map server response if it does not exist yet and return the key used in the cache
-func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse, certIDs, policyIDs []*common.SHA256Output, mapserverID string) (string, error) {
+requires forall k int :: {&certIDs[k]} 0 <= k && k < len(certIDs) ==> acc(&certIDs[k])
+requires forall k int :: {&policyIDs[k]} 0 <= k && k < len(policyIDs) ==> acc(&policyIDs[k])
+preserves acc(proofCache)
+preserves forall str string :: {str in domain(proofCache)} str in domain(proofCache) ==> acc_inj_proofCacheEntry(proofCache[str], str)
+ensures err != nil ==> res in domain(proofCache)
+func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse, certIDs, policyIDs []*common.SHA256Output, mapserverID string) (res string, err error) /*{ // add names to return parameters
 	// merge and sort cert and policy IDs
-	ids := append(certIDs[:0:0], certIDs...)
-	ids = append(ids, policyIDs...)
+	ids := append(perm(1), certIDs[:0:0], certIDs...)
+	ids = append(perm(1), ids, policyIDs...)
 	sort.Slice(ids, func(i, j int) bool {
 		return bytes.Compare(ids[i][:], ids[j][:]) == -1
 	})
@@ -145,12 +157,18 @@ func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse
 		proofCache[proofCacheKey] = newProofCacheEntry(&response.PoI, proofKey, mapserverID, response.TreeHeadSig, ids, leafHash)
 	}
 	return proofCacheKey, nil
-}
+}*/
 
 // helper function to allocate a new ProofCacheEntry
+requires acc(mapserverInfoCache, _)
+requires acc(poi)
+requires forall k int :: {&poi.ProofValue[k]} 0 <= k && k < len(poi.ProofValue) ==> acc(&poi.ProofValue[k])
+requires mapserverID in mapserverInfoCache
+requires forall k int :: {&leafHash[k]} 0 <= k && k < len(leafHash) ==> acc(&leafHash[k])
+ensures acc_inj_proofCacheEntry(res, "")
 func newProofCacheEntry(poi *mapCommon.PoI, proofKey []byte, mapserverID string, treeHeadSignature []byte,
-	sortedCertificateHashes []*common.SHA256Output, leafHash []byte) *ProofCacheEntry {
-	proofCacheEntry := ProofCacheEntry{
+	sortedCertificateHashes []*common.SHA256Output, leafHash []byte) (res *ProofCacheEntry) { // name return param
+	proofCacheEntry@ := ProofCacheEntry{
 		poi:                     poi,
 		treeHeadSignature:       treeHeadSignature,
 		sortedCertificateHashes: sortedCertificateHashes,
@@ -161,22 +179,39 @@ func newProofCacheEntry(poi *mapCommon.PoI, proofKey []byte, mapserverID string,
 		result:                  false,
 		lastError:               nil,
 	}
+	defer fold acc_inj_proofCacheEntry(&proofCacheEntry, "")
 	return &proofCacheEntry
 }
 
+pred acc_inj_proofCacheEntry(proofCacheEntry *ProofCacheEntry, proofCacheKey string) {
+	acc(mapserverInfoCache, _) &&
+	acc(proofCacheEntry) && acc(proofCacheEntry.poi) && proofCacheEntry.mapserverID in domain(mapserverInfoCache) &&
+	(forall k int :: {&proofCacheEntry.poi.ProofValue[k]} 0 <= k && k < len(proofCacheEntry.poi.ProofValue) ==> acc(&proofCacheEntry.poi.ProofValue[k])) && 
+	(forall k int :: {&proofCacheEntry.calculatedLeafHash[k]} 0 <= k && k < len(proofCacheEntry.calculatedLeafHash) ==> acc(&proofCacheEntry.calculatedLeafHash[k]))
+}
+
 // verify previously registered proof identified by its proofCache key
-func VerifyProof(proofCacheKey string) *ProofCacheEntry {
+preserves acc(proofCache)
+preserves forall str string :: {str in domain(proofCache)} str in domain(proofCache) ==> acc_inj_proofCacheEntry(proofCache[str], str)
+preserves acc(mapserverInfoCache, _)
+preserves forall str string :: {str in domain(mapserverInfoCache)} str in domain(mapserverInfoCache) ==> acc(mapserverInfoCache[str]) && acc(mapserverInfoCache[str].publicKey)
+ensures res != nil ==> exists str string :: proofCacheKey in domain(proofCache) ==> proofCache[proofCacheKey] == res
+func VerifyProof(proofCacheKey string) (res *ProofCacheEntry) { // added name to return param
+
 	proofCacheEntry, inCache := proofCache[proofCacheKey]
 
 	// if the proof is not yet cached, it cannot be verified
 	if !inCache {
 		return nil
 	}
+	unfold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
+
 	poi := proofCacheEntry.poi
 
 	// if the same proof was already evaluated,
 	// return result of previous evaluation
 	if proofCacheEntry.evaluated {
+		fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 		return proofCacheEntry
 	}
 
@@ -186,6 +221,7 @@ func VerifyProof(proofCacheKey string) *ProofCacheEntry {
 			proofCacheEntry.result = false
 			proofCacheEntry.evaluated = true
 			proofCacheEntry.lastError = fmt.Errorf("MHT leaf hashes do not match: %x (provided by mapserver) %x (calculated)", poi.ProofValue, proofCacheEntry.calculatedLeafHash)
+			fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 			return proofCacheEntry
 		}
 	} else {
@@ -194,6 +230,7 @@ func VerifyProof(proofCacheKey string) *ProofCacheEntry {
 			proofCacheEntry.result = false
 			proofCacheEntry.evaluated = true
 			proofCacheEntry.lastError = fmt.Errorf("Returned non-inclusion proof with existing certificates")
+			fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 			return proofCacheEntry
 		}
 	}
@@ -204,6 +241,7 @@ func VerifyProof(proofCacheKey string) *ProofCacheEntry {
 			proofCacheEntry.result = false
 			proofCacheEntry.evaluated = true
 			proofCacheEntry.lastError = fmt.Errorf("Failed to validate inclusion proof")
+			fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 			return proofCacheEntry
 		}
 	} else {
@@ -211,6 +249,7 @@ func VerifyProof(proofCacheKey string) *ProofCacheEntry {
 			proofCacheEntry.result = false
 			proofCacheEntry.evaluated = true
 			proofCacheEntry.lastError = fmt.Errorf("Failed to validate non-inclusion proof")
+			fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 			return proofCacheEntry
 		}
 	}
@@ -221,10 +260,12 @@ func VerifyProof(proofCacheKey string) *ProofCacheEntry {
 		proofCacheEntry.result = false
 		proofCacheEntry.evaluated = true
 		proofCacheEntry.lastError = fmt.Errorf("Failed to verify signature: %s", err)
+		fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 		return proofCacheEntry
 	}
 
 	proofCacheEntry.result = true
 	proofCacheEntry.evaluated = true
+	fold acc_inj_proofCacheEntry(proofCacheEntry, proofCacheKey)
 	return proofCacheEntry
 }

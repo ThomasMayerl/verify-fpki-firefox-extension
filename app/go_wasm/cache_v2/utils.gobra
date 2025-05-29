@@ -156,6 +156,7 @@ func TransformListToInterfaceType(list []any) []interface{} {
 	return t
 }
 
+/*
 // TODO: Was generic before. Could be that this does not work
 requires forall k int :: 0 <= k && k < len(list) ==> acc(&list[k]) && forall j int :: 0 <= j && j < len(list[k]) ==> acc(&list[k][j])
 ensures forall k int :: 0 <= k && k < len(list) ==> acc(&list[k]) && forall j int :: 0 <= j && j < len(list[k]) ==> acc(&list[k][j])
@@ -173,7 +174,7 @@ func TransformNestedListsToInterfaceType(list [][]any) []interface{} {
 		t[i] = ti
 	}
 	return t
-}
+}*/
 
 requires forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
 ensures forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
@@ -188,7 +189,8 @@ func SliceToSet(slice []string) map[string]struct{} {
 }
 
 // compute the base64 encoded hash of the base64 encoded payload
-func GetPayloadAndHash(b64payload string) ([]byte, string) {
+ensures forall k int :: {&payload[k]} 0 <= k && k < len(payload) ==> acc(&payload[k])
+func GetPayloadAndHash(b64payload string) (payload []byte, str string) { // added names to return parameters
 	payload, err := base64.StdEncoding.DecodeString(b64payload)
 	if err != nil {
 		log.Fatal(err)

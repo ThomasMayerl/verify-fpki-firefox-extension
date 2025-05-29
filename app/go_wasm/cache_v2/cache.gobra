@@ -83,13 +83,13 @@ var UnhandledCriticalExtensionWhitelist = []asn1.ObjectIdentifier{CTPoison, CTKe
 var cacheFileSystem embed.FS
 
 // some variables used to measure runtime
-var MS int64 = 0
-var MSS int64 = 0
-var NCertificatesAdded int64 = 0
+var MS@ int64 = 0
+var MSS@ int64 = 0
+var NCertificatesAdded@ int64 = 0
 
 // remove extensions present in UnhandledCriticalExtensionWhitelist from the
 // certificate's UnhandledCriticalExtensions
-func removeWhitelistedUnhandledCriticalExtensions(certificate *x509.Certificate) {
+func removeWhitelistedUnhandledCriticalExtensions(certificate *x509.Certificate) /*{
 	if certificate.UnhandledCriticalExtensions != nil {
 		unhandledCriticalExtensionsFiltered := []asn1.ObjectIdentifier{}
 		for _, criticalExtension := range certificate.UnhandledCriticalExtensions {
@@ -106,18 +106,18 @@ func removeWhitelistedUnhandledCriticalExtensions(certificate *x509.Certificate)
 		certificate.UnhandledCriticalExtensions = unhandledCriticalExtensionsFiltered
 	}
 }
-
+*/
 // helper function to allocate a new SubjectSKICacheEntry
 // containing an empy certificates set
-func newSubjectSKICacheEntry() *SubjectSKICacheEntry {
+func newSubjectSKICacheEntry() *SubjectSKICacheEntry /*{
 	subjectSKICacheEntry := SubjectSKICacheEntry{
 		certificates: map[string]struct{}{},
 	}
 	return &subjectSKICacheEntry
-}
+}*/
 
 // compute the base64 encoded hash of certificate.Raw
-func GetRawCertificateHash(certificate *x509.Certificate) string {
+func GetRawCertificateHash(certificate *x509.Certificate) string /*{
 	h := sha256.New()
 	_, err := h.Write(certificate.Raw)
 	if err != nil {
@@ -125,10 +125,10 @@ func GetRawCertificateHash(certificate *x509.Certificate) string {
 	}
 	hash := h.Sum(nil)
 	return base64.StdEncoding.EncodeToString(hash)
-}
+}*/
 
 // compute the base64 encoded hash of <certificate.Subject, certificate.SubjectKeyId>
-func GetRawCertificateSubjectSKIHash(certificate *x509.Certificate) string {
+func GetRawCertificateSubjectSKIHash(certificate *x509.Certificate) string /*{
 	h := sha256.New()
 	_, err := h.Write([]byte(certificate.Subject.String()))
 	if err != nil {
@@ -147,10 +147,10 @@ func GetRawCertificateSubjectSKIHash(certificate *x509.Certificate) string {
 	}
 	hash := h.Sum(nil)
 	return base64.StdEncoding.EncodeToString(hash)
-}
+}*/
 
 // compute the base64 encoded hash of <certificate.Issuer, certificate.AuthorityKeyId>
-func GetRawCertificateIssuerAKIHash(certificate *x509.Certificate) string {
+func GetRawCertificateIssuerAKIHash(certificate *x509.Certificate) string /*{
 	h := sha256.New()
 	_, err := h.Write([]byte(certificate.Issuer.String()))
 	if err != nil {
@@ -162,11 +162,11 @@ func GetRawCertificateIssuerAKIHash(certificate *x509.Certificate) string {
 	}
 	hash := h.Sum(nil)
 	return base64.StdEncoding.EncodeToString(hash)
-}
+}*/
 
 // initialize the caches based on the certificates in
 // the trust store (trust store location: trustStoreDir)
-func InitializeCache(trustStoreDir string) int {
+func InitializeCache(trustStoreDir string) int /*{
 	subjectSKICache = map[string]*SubjectSKICacheEntry{}
 	certificateCache = map[string]*CertificateCacheEntry{}
 	dnsNameCache = map[string][]string{}
@@ -215,11 +215,11 @@ func InitializeCache(trustStoreDir string) int {
 	}
 	return added
 }
-
+*/
 // takes a list of certificate hashes
 // and returns a list containing all certificate hashes
 // from the input that are not yet cached
-func GetMissingCertificateHashesList(certificateHashes []string) []string {
+func GetMissingCertificateHashesList(certificateHashes []string) []string /*{
 
 	var missingCertificateHashes []string
 	for _, certificateHash := range certificateHashes {
@@ -237,11 +237,11 @@ func GetMissingCertificateHashesList(certificateHashes []string) []string {
 		}
 	}
 	return missingCertificateHashes
-}
+}*/
 
 // check whether specific certificate validation error
 // should be ignored (added to ignoredCertificateHashes)
-func ignoreError(err error) bool {
+func ignoreError(err error) bool /*{
 	certificateInvalidError, ok := err.(x509.CertificateInvalidError)
 	if ok {
 		for _, ignoreReason := range ignoreReasons {
@@ -254,14 +254,14 @@ func ignoreError(err error) bool {
 		return false
 	}
 }
-
+*/
 // check a certificate against a parent certificate
 // checks whether parent verifies the child signature and the child's
 // validity period.
 // the first return value indicates whether these checks all succeeded
 // the second return value indicates whether the certificate should still
 // be remembered in case of a failing check
-func verifyChildWithParentCertificate(certificate *x509.Certificate, parentCertificate *x509.Certificate) (bool, bool) {
+func verifyChildWithParentCertificate(certificate *x509.Certificate, parentCertificate *x509.Certificate) (bool, bool) /*{
 
 	var errs []error
 
@@ -293,14 +293,14 @@ func verifyChildWithParentCertificate(certificate *x509.Certificate, parentCerti
 	// track total time spent doing signature checks
 	MSS = MSS + time.Now().Sub(now).Milliseconds()
 	return len(errs) == 0, true
-}
+}*/
 
 // allocate entries in the certificateCache, dnsNameCache, subjectSKICache
 // if necessary (for non-root certificates)
 func allocateCacheEntries(certificate *x509.Certificate,
 	certificateHash string,
 	certificateSubjectSKIHash string,
-	certificateIssuerAKIHash string) {
+	certificateIssuerAKIHash string) /*{
 
 	var certificateCacheEntry *CertificateCacheEntry
 	certificateCacheEntry = &CertificateCacheEntry{
@@ -329,14 +329,14 @@ func allocateCacheEntries(certificate *x509.Certificate,
 			dnsNameCache[currentDNSName] = append(dnsNameCache[currentDNSName], certificateHash)
 		}
 	}
-}
+}*/
 
 // verify child certificate with a (pot.) parent certificate and allocate
 // cache entries for the child if necessary
 func verifyChildWithParentAndAllocateCaches(certificate *x509.Certificate, parentCertificate *x509.Certificate,
 	certificateHash string,
 	certificateSubjectSKIHash string,
-	certificateIssuerAKIHash string) bool {
+	certificateIssuerAKIHash string) bool /*{
 	checksPassed, ignore := verifyChildWithParentCertificate(certificate, parentCertificate)
 
 	// if all checks are passed, allocate new cache entries if necessary
@@ -351,7 +351,7 @@ func verifyChildWithParentAndAllocateCaches(certificate *x509.Certificate, paren
 		}
 		return false
 	}
-}
+}*/
 
 // process a certificate by potentially adding
 // it to the cache
@@ -359,7 +359,7 @@ func verifyChildWithParentAndAllocateCaches(certificate *x509.Certificate, paren
 // returns the hashes of all processed certificates
 func processCertificate(certificate *x509.Certificate,
 	certificatesInRequestProcessed map[*x509.Certificate]bool,
-	certificatesInRequest map[string][]*x509.Certificate) ([]string, bool) {
+	certificatesInRequest map[string][]*x509.Certificate) ([]string, bool) /*{
 
 	certificateHash := GetRawCertificateHash(certificate)
 	processedCertificateHashes := []string{certificateHash}
@@ -465,12 +465,12 @@ func processCertificate(certificate *x509.Certificate,
 	// when calling VerifyLegacy
 	return processedCertificateHashes, verifyChildWithParentAndAllocateCaches(certificate, potParentCertificate, certificateHash,
 		certificateSubjectSKIHash, issuerAKIHash)
-}
+}*/
 
 // adds a list of certificates to the cache
 // TODO: pot. hashing the certificates is unnecessary as the hashes might already
 // be available from the first mapserver response
-func AddCertificatesToCache(certificates []*x509.Certificate) []string {
+func AddCertificatesToCache(certificates []*x509.Certificate) []string /*{
 
 	nEntriesBefore := len(certificateCache)
 	now := time.Now()
@@ -513,10 +513,10 @@ func AddCertificatesToCache(certificates []*x509.Certificate) []string {
 	NCertificatesAdded = int64(len(certificateCache) - nEntriesBefore)
 
 	return processedCertificateHashes
-}
+}*/
 
 // helper function to recursively build certificate chains
-func buildChains(certificateHash string) []*CertificateChainInfo {
+func buildChains(certificateHash string) []*CertificateChainInfo /*{
 	certificateCacheEntry, _ := certificateCache[certificateHash]
 	if certificateCacheEntry.trustRoot {
 		// base case: reached a root certificate
@@ -543,10 +543,10 @@ func buildChains(certificateHash string) []*CertificateChainInfo {
 		}
 		return l
 	}
-}
+}*/
 
 // returns all the certificate chains in the cache for a specific dns name
-func GetCertificateChainsForDomain(dnsName string) []*CertificateChainInfo {
+func GetCertificateChainsForDomain(dnsName string) []*CertificateChainInfo /*{
 
 	// query with full dnsName and dnsName with last subdomain replaced as a wildcard
 	dnsNames := []string{dnsName}
@@ -568,4 +568,4 @@ func GetCertificateChainsForDomain(dnsName string) []*CertificateChainInfo {
 		}
 	}
 	return chains
-}
+}*/

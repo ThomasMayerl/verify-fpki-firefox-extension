@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
 	"fpki/pkg/common"
 	"fpki/pkg/common/crypto"
 	"fpki/pkg/util"
@@ -41,34 +40,51 @@ type ImmutablePolicyCacheEntry struct {
 }
 
 // cache mapping base64 encoded policy hash to a PolicyCacheEntry
-var policyCache = map[string]*PolicyCacheEntry{}
+var policyCache@ = map[string]*PolicyCacheEntry{}
 
 // cache mapping base64 encoded hash over the immutable policy
 // certificate fields to a PolicyCacheEntry
-var immutablePolicyCache = map[string]*ImmutablePolicyCacheEntry{}
+var immutablePolicyCache@ = map[string]*ImmutablePolicyCacheEntry{}
 
 // map containing all policy hashes that should be ignored
 // (not be requested from the map server again) in the future
 // (e.g., because they correspond to expired policies)
-var ignoredPolicyHashes = map[string]struct{}{}
+var ignoredPolicyHashes@ = map[string]struct{}{}
 
 // cache mapping a dns name to a list of policy hashes
 // of policies that correspond to this dns name
-var policyDnsNameCache = map[string][]string{}
+var policyDnsNameCache@ = map[string][]string{}
 
 // initialize the caches based on the (root) policy certificates in
 // the PCA trust store (trust store location: trustStoreDir)
+preserves acc(&policyCache)
+preserves acc(&immutablePolicyCache)
+preserves acc(&policyDnsNameCache)
+preserves acc(&ignoredPolicyHashes)
+ensures acc(policyCache)
+ensures acc(immutablePolicyCache)
+ensures acc(policyDnsNameCache)
+ensures acc(ignoredPolicyHashes)
+ensures PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), perm(1))
+ensures ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))
+ensures PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
 func InitializePolicyCache(trustStoreDir string) int {
 	policyCache = map[string]*PolicyCacheEntry{}
 	immutablePolicyCache = map[string]*ImmutablePolicyCacheEntry{}
 	ignoredPolicyHashes = map[string]struct{}{}
 	policyDnsNameCache = map[string][]string{}
 
+	fold PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), perm(1))
+	fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))
+	fold PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+
 	files, err := cacheFileSystem.ReadDir(trustStoreDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 	added := 0
+
+	invariant forall k int :: {&files[k]} 0 <= k && k < len(files) ==> acc(&files[k]) && files[k] != nil
 	for _, file := range files {
 		if !strings.HasSuffix(file.Name(), ".pc") {
 			continue
@@ -80,16 +96,14 @@ func InitializePolicyCache(trustStoreDir string) int {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		fmt.Printf("initializing with root (%s): %s\n", file, fileBytes)
-
 		policy, err := util.PolicyCertificateFromBytes(fileBytes)
 		if err != nil {
 			log.Fatalf("loading policy certificate from trust store (%s): %s", path, err)
 		}
 
-		policyHash := getPolicyHash(policy)
-		immutablePolicyHash := getImmutablePolicyHash(policy)
+		policyHash := getPolicyHash(policy, 1/2)
+		immutablePolicyHash := getImmutablePolicyHash(policy, 1/2)
 		immutableIssuerHash := getIssuerHash(policy)
 
 		allocatePolicyCacheEntries(policy, policyHash, immutablePolicyHash, immutableIssuerHash)
@@ -102,9 +116,19 @@ func InitializePolicyCache(trustStoreDir string) int {
 // takes a list of certificate hashes
 // and returns a list containing all certificate hashes
 // from the input that are not yet cached
-func GetMissingPolicyHashesList(policyHashes []string) []string {
+preserves acc(&ignoredPolicyHashes, 1/2)
+preserves acc(ignoredPolicyHashes, 1/2)
+preserves acc(certificateCache, 1/2)
+preserves forall k int :: {&policyHashes[k]} 0 <= k && k < len(policyHashes) ==> acc(&policyHashes[k])
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func GetMissingPolicyHashesList(policyHashes []string) (res []string) { //Added return param name
 
 	var missingPolicyHashes []string
+	invariant acc(&ignoredPolicyHashes, 1/2)
+	invariant acc(ignoredPolicyHashes, 1/2)
+	invariant acc(certificateCache, 1/2) 
+	invariant forall k int :: {&policyHashes[k]} 0 <= k && k < len(policyHashes) ==> acc(&policyHashes[k])
+	invariant forall k int :: {&missingPolicyHashes[k]} 0 <= k && k < len(missingPolicyHashes) ==> acc(&missingPolicyHashes[k])
 	for _, policyHash := range policyHashes {
 
 		// if the certificate either should be ignored (e.g., we have seen
@@ -115,17 +139,39 @@ func GetMissingPolicyHashesList(policyHashes []string) []string {
 		if ignore {
 			continue
 		}
-		if certificateCache[policyHash] == nil {
-			missingPolicyHashes = append(missingPolicyHashes, policyHash)
+		// TODO WHY DOES THIS NOT WORK IN GOBRA?
+		// if certificateCache[policyHash] == nil {
+		if cCacheEntry, _ := certificateCache[policyHash]; cCacheEntry == nil {
+			missingPolicyHashes = append(perm(1), missingPolicyHashes, policyHash)
 		}
 	}
 	return missingPolicyHashes
 }
 
+requires acc(policiesInRequest)
+ensures res === let arr, ok := policiesInRequest[str] in arr
+decreases
+pure func getPoliciesFromMap(policiesInRequest map[string][]*common.PolicyCertificate, str string) (res []*common.PolicyCertificate)
+
 // adds a list of certificates to the cache
 // TODO: pot. hashing the certificates is unnecessary as the hashes might already
 // be available from the first mapserver response
-func AddPoliciesToCache(policies []*common.PolicyCertificate) []string {
+requires policyPerms > 0
+requires forall k int :: {&policies[k]} 0 <= k && k < len(policies) ==> acc(&policies[k]) && acc(policies[k]) && policy_IssuerHash(policies[k].IssuerHash, perm(1))
+preserves acc(&policyCache, 1/2)
+preserves acc(policyCache)
+preserves acc(&immutablePolicyCache, 1/2)
+preserves acc(immutablePolicyCache)
+preserves acc(&policyDnsNameCache, 1/2)
+preserves acc(policyDnsNameCache, 1/2) // we just need the policy dns name cache to check invariants of other caches
+preserves PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), policyPerms)
+preserves ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))
+preserves PolicyDnsNameCachePermissions(dict(policyDnsNameCache))  
+preserves acc(&NCertificatesAdded)
+preserves acc(&MS)
+preserves acc(&MSS)
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func AddPoliciesToCache(policies []*common.PolicyCertificate, ghost policyPerms perm) (res []string) /*{ // added return param name
 	nEntriesBefore := len(policyCache)
 	now := time.Now()
 
@@ -136,23 +182,43 @@ func AddPoliciesToCache(policies []*common.PolicyCertificate) []string {
 	// create a map of all policies for a given hash over the immutable
 	// policy fields
 	policiesInRequest := map[string][]*common.PolicyCertificate{}
+	
+	invariant acc(policiesInRequestProcessed)
+	invariant acc(policiesInRequest) 
+	invariant forall k int :: {&policies[k]} 0 <= k && k < len(policies) ==> acc(&policies[k]) && acc(policies[k], policyPerms)
+	invariant forall str string :: {policiesInRequest[str]} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k]) && exists l int :: 0 <= l && l < len(policies) && policies[l] == getPoliciesFromMap(policiesInRequest, str)[k]//acc(getPoliciesFromMap(policiesInRequest, str)[k], policyPerms)
 	for _, policy := range policies {
 		policiesInRequestProcessed[policy] = false
-		immutablePolicyHash := getImmutablePolicyHash(policy)
+		immutablePolicyHash := getImmutablePolicyHash(policy, policyPerms)
 		v := policiesInRequest[immutablePolicyHash]
 		if v == nil {
 			policiesInRequest[immutablePolicyHash] = []*common.PolicyCertificate{}
 		}
-		policiesInRequest[immutablePolicyHash] = append(policiesInRequest[immutablePolicyHash], policy)
+		// TODO WHY DOES THIS NOT WORK:
+		// policiesInRequest[immutablePolicyHash] = append(perm(1), policiesInRequest[immutablePolicyHash], policy)
+		//policiesInRequest[immutablePolicyHash] = append(perm(1), getPoliciesFromMap(policiesInRequest, immutablePolicyHash), policy)
+		//entry = append(perm(1/2), entry, policy)
+		assume policy != nil 
+		assume getPoliciesFromMap(policiesInRequest, immutablePolicyHash) != nil
+		policiesInRequest[immutablePolicyHash] = append(perm(1), getPoliciesFromMap(policiesInRequest, immutablePolicyHash), policy)
+		assert policiesInRequest[immutablePolicyHash] === getPoliciesFromMap(policiesInRequest, immutablePolicyHash)
+		//assert forall str string :: {policiesInRequest[str]} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k]) && exists l int :: 0 <= l && l < len(policies) && policies[l] == getPoliciesFromMap(policiesInRequest, str)[k]//acc(getPoliciesFromMap(policiesInRequest, str)[k], policyPerms)
+		assert exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, immutablePolicyHash)) && getPoliciesFromMap(policiesInRequest, immutablePolicyHash)[k] == policy
+		assume false
+		//assert exists k int :: 0 <= k && k < len(entry) && entry[k] == policy
+		assert forall k int :: {&getPoliciesFromMap(policiesInRequest, immutablePolicyHash)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, immutablePolicyHash)) ==> acc(&getPoliciesFromMap(policiesInRequest, immutablePolicyHash)[k]) && exists l int :: 0 <= l && l < len(policies) && policies[l] == getPoliciesFromMap(policiesInRequest, immutablePolicyHash)[k]
+		assume false
 	}
+	assume false
 	// add all certificates to cache
 	// skip certificates that have already been added
 	// in a recursive step
 	var processedPolicyHashes []string
+	invariant forall k int :: {&policies[k]} 0 <= k && k < len(policies) ==> acc(&policies[k]) && acc(policies[k], policyPerms)
 	for _, policy := range policies {
 		if !policiesInRequestProcessed[policy] {
 			hashes, added := processPolicy(policy, policiesInRequestProcessed, policiesInRequest)
-			processedPolicyHashes = append(processedPolicyHashes, hashes...)
+			processedPolicyHashes = append(perm(1), processedPolicyHashes, hashes...)
 			if added {
 				NCertificatesAdded++
 			} else {
@@ -169,46 +235,137 @@ func AddPoliciesToCache(policies []*common.PolicyCertificate) []string {
 	NCertificatesAdded = int64(len(policyCache) - nEntriesBefore)
 
 	return processedPolicyHashes
-}
+}*/
+
+ghost
+decreases
+requires oldPerms > 0
+requires newPerms > 0
+requires newPerms <= oldPerms
+requires acc(policiesInRequest, _)
+requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], _)
+requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) /*&& !(getPoliciesFromMap(policiesInRequest, str)[k] in range(policyCache)) */ ==> acc(getPoliciesFromMap(policiesInRequest, str)[k], newPerms / 2)
+requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor /*&& !(getPoliciesFromMap(policiesInRequest, str)[k] in range(policyCache)) */ ==> policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, oldPerms)
+requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
+requires policy_IssuerHash(exceptFor.IssuerHash, newPerms)
+ensures acc(policiesInRequest, _)
+ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], _)
+ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) /*&& !(getPoliciesFromMap(policiesInRequest, str)[k] in range(policyCache)) */ ==> acc(getPoliciesFromMap(policiesInRequest, str)[k], newPerms / 2)
+ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) /*&& !(getPoliciesFromMap(policiesInRequest, str)[k] in range(policyCache)) */ ==> policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, newPerms)
+ensures exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
+func refoldPolicyIssuerHashes(policiesInRequest map[string][]*common.PolicyCertificate, exceptFor *common.PolicyCertificate, oldPerms perm, newPerms perm/*, policyCache dict[string]*PolicyCacheEntry*/)
 
 // process a certificate by potentially adding
 // it to the cache
 // recursively processes parent certificates
 // returns the hashes of all processed certificates
+//requires cachePerms > 0
+requires inPerms > 0
+requires acc(policiesInRequestProcessed)
+requires acc(policiesInRequest, _)//, cachePerms) // use cachePerms also for this and policy pointers so we know that it doesn't change on recursive call and policy is still in there
+requires acc(&policyCache)//, cachePerms)
+requires acc(&immutablePolicyCache)//, cachePerms)
+requires acc(&policyDnsNameCache)//, cachePerms)
+requires acc(&ignoredPolicyHashes)//, cachePerms)
+requires acc(policyCache)//, cachePerms)
+requires acc(immutablePolicyCache)//, cachePerms)
+requires acc(policyDnsNameCache)//, cachePerms)
+requires acc(ignoredPolicyHashes)//, cachePerms)
+requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
+requires PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), inPerms)
+requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], _)/*, cachePerms)*/ && getPoliciesFromMap(policiesInRequest, str)[k] in domain(policiesInRequestProcessed) && acc(getPoliciesFromMap(policiesInRequest, str)[k], inPerms) && policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, inPerms)
+requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == policy)
+preserves acc(&NCertificatesAdded)
+preserves acc(&MSS)
+ensures outPerms > 0 && outPerms <= inPerms
+ensures acc(policiesInRequestProcessed)
+ensures acc(policiesInRequest, _)//, cachePerms) // use cachePerms also for this and policy pointers so we know that it doesn't change on recursive call and policy is still in there
+ensures acc(&policyCache)//, cachePerms)
+ensures acc(&immutablePolicyCache)//, cachePerms)
+ensures acc(&policyDnsNameCache)//, cachePerms)
+ensures acc(&ignoredPolicyHashes)//, cachePerms)
+ensures acc(policyCache)//, cachePerms)
+ensures acc(immutablePolicyCache)//, cachePerms)
+ensures acc(policyDnsNameCache)//, cachePerms)
+ensures acc(ignoredPolicyHashes)//, cachePerms)
+ensures ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
+ensures PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms)
+ensures PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], _/*, cachePerms*/) && getPoliciesFromMap(policiesInRequest, str)[k] in domain(policiesInRequestProcessed) && acc(getPoliciesFromMap(policiesInRequest, str)[k], outPerms) && policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, outPerms)
+ensures exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == policy)
+ensures policiesInRequestProcessed[policy] == true
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
 func processPolicy(policy *common.PolicyCertificate,
 	policiesInRequestProcessed map[*common.PolicyCertificate]bool,
-	policiesInRequest map[string][]*common.PolicyCertificate) ([]string, bool) {
+	policiesInRequest map[string][]*common.PolicyCertificate,
+	//ghost cachePerms perm,
+	ghost inPerms perm) (res []string, added bool, ghost outPerms perm) { // added parameter names
+	ghost outPerms = inPerms
 
-	policyHash := getPolicyHash(policy)
+	policyHash := getPolicyHash(policy, outPerms / 2)
 	processedPolicyHashes := []string{policyHash}
-	immutablePolicyHash := getImmutablePolicyHash(policy)
+	immutablePolicyHash := getImmutablePolicyHash(policy, outPerms / 2)
 
 	// mark the certificate as processed on exit
-	defer func() {
+	
+	// TODO WHY DOES THIS NOT WORK?
+	/*defer func() {
 		policiesInRequestProcessed[policy] = true
-	}()
+	}()*/
 
 	// if have already processed the certificate in the request, return whether
 	// it was added to the cache
 	_, inCache := policyCache[policyHash]
 	if policiesInRequestProcessed[policy] || inCache {
-		return processedPolicyHashes, inCache
+		policiesInRequestProcessed[policy] = true // added
+		return processedPolicyHashes, inCache, outPerms
 	}
 	_, ignored := ignoredPolicyHashes[policyHash]
 	if ignored {
-		return processedPolicyHashes, false
+		policiesInRequestProcessed[policy] = true // added
+		return processedPolicyHashes, false, outPerms
 	}
 
 	// recursively process parent certificates present in the request
-	issuerHash := getIssuerHash(policy)
-	parentPolicies := policiesInRequest[issuerHash]
+	issuerHash := unfolding policy_IssuerHash(policy.IssuerHash, outPerms) in getIssuerHash(policy)
+	// TODO WHY DOES THIS NOT WORK parentPolicies := policiesInRequest[issuerHash]
+	parentPolicies := getPoliciesFromMap(policiesInRequest, issuerHash)
+
+	invariant acc(&NCertificatesAdded)
+	invariant acc(&MSS)
+	//invariant cachePerms > 0 && cachePerms == old(cachePerms)
+	invariant outPerms > 0 && outPerms <= old(outPerms) && outPerms <= inPerms
+	invariant acc(policiesInRequestProcessed)
+	invariant acc(policiesInRequest, _)//, cachePerms) // use cachePerms also for this and policy pointers so we know that it doesn't change on recursive call and policy is still in there
+invariant acc(&policyCache)//, cachePerms)
+invariant acc(&immutablePolicyCache)//, cachePerms)
+invariant acc(&policyDnsNameCache)//, cachePerms)
+invariant acc(&ignoredPolicyHashes)//, cachePerms)
+invariant acc(policyCache)//, cachePerms)
+invariant acc(immutablePolicyCache)//, cachePerms)
+invariant acc(policyDnsNameCache)//, cachePerms)
+invariant acc(ignoredPolicyHashes)//, cachePerms)
+	invariant ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
+	invariant PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms)
+	invariant PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+	invariant forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], _/*, cachePerms*/) && getPoliciesFromMap(policiesInRequest, str)[k] in domain(policiesInRequestProcessed) && acc(getPoliciesFromMap(policiesInRequest, str)[k], outPerms) && policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, outPerms)
+	invariant exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == policy)
+	invariant parentPolicies === getPoliciesFromMap(policiesInRequest, issuerHash)
+	invariant forall k int :: {&processedPolicyHashes[k]} 0 <= k && k < len(processedPolicyHashes) ==> acc(&processedPolicyHashes[k])
 	for _, parentPolicy := range parentPolicies {
-		if parentHashes, added := processPolicy(parentPolicy, policiesInRequestProcessed, policiesInRequest); added {
-			processedPolicyHashes = append(processedPolicyHashes, parentHashes...)
+		/*unfold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), cachePerms)
+		fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), cachePerms / 2)*/
+		if parentHashes, added, tmp := processPolicy(parentPolicy, policiesInRequestProcessed, policiesInRequest,/* cachePerms / 2,*/ outPerms); added {
+			ghost outPerms = tmp
+			processedPolicyHashes = append(perm(1/2), processedPolicyHashes, parentHashes...)
 			NCertificatesAdded++
 		} else {
+			ghost outPerms = tmp
 			log.Printf("[Go] Did not add policy: %v\n", parentPolicy)
 		}
+		/*unfold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), cachePerms / 2)
+		fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), cachePerms)*/
 	}
 
 	// now, the cache should be populated with parents (if there were any in the request
@@ -216,57 +373,142 @@ func processPolicy(policy *common.PolicyCertificate,
 
 	// get potential parent certificates of the current certificate
 	parentImmutablePolicyCacheEntry, _ := immutablePolicyCache[issuerHash]
-
+	unfold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
 	// if no potential parent certificate is present in the cache,
 	// cannot add the certificate to the cache
 	if parentImmutablePolicyCacheEntry == nil || len(parentImmutablePolicyCacheEntry.policyHashes) == 0 {
-		return processedPolicyHashes, false
+		assume false
+		policiesInRequestProcessed[policy] = true // added statement instead of defer
+		fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
+		return processedPolicyHashes, false, outPerms
 	}
-
+	unfold ImmutablePolicyCachePermissions_policyHashes(parentImmutablePolicyCacheEntry.policyHashes, issuerHash, dict(policyCache))
+	unfold PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms)
 	// check signature
 	potParentPolicy := policyCache[parentImmutablePolicyCacheEntry.policyHashes[0]].policy
 
 	// check that the certificate signature can be verified using the
 	// parent certificate and the certificate is currently valid.
-	return processedPolicyHashes, verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,
-		immutablePolicyHash, issuerHash)
+	policiesInRequestProcessed[policy] = true //added
+	ghost parentPolicyHash := parentImmutablePolicyCacheEntry.policyHashes[0]
+	fold PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms)
+	fold ImmutablePolicyCachePermissions_policyHashes(parentImmutablePolicyCacheEntry.policyHashes, issuerHash, dict(policyCache))
+	fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))//, cachePerms)
+	// changed from return processedPolicyHashes, verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,
+	//	immutablePolicyHash, issuerHash)
+	addedToCache, tmp := verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,	immutablePolicyHash, issuerHash, outPerms, parentPolicyHash)
+	refoldPolicyIssuerHashes(policiesInRequest, policy, outPerms, tmp)
+	ghost outPerms = tmp
+	return processedPolicyHashes, addedToCache, outPerms
 }
 
 // verify child policy with a (pot.) parent certificate and allocate
 // cache entries for the child if necessary
 // returns true if the policy was added to the cache and false if the
 // policy was added to the ignored policies
+requires inPerms > 0
+requires acc(policy, inPerms)
+requires policy_IssuerHash(policy.IssuerHash, inPerms)
+requires acc(&policyCache)
+requires acc(&immutablePolicyCache)
+requires acc(&policyDnsNameCache)
+requires acc(&ignoredPolicyHashes)
+requires acc(immutablePolicyCache)
+requires acc(policyCache)
+requires acc(policyDnsNameCache)
+requires acc(ignoredPolicyHashes)
+requires immutableIssuerPolicyHash in domain(immutablePolicyCache)
+/*requires forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> 
+    acc(immutablePolicyCache[str])
+ requires forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) && str != immutableIssuerPolicyHash ==>  ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache))
+ requires let hashes := immutablePolicyCache[immutableIssuerPolicyHash].policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k]) && hashes[k] in domain(policyCache))*/
+
+requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))
+
+/*requires forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
+    acc(policyCache[str]) && 
+    policyCache[str].immutableHash != base64.StdEncoding.EncodeToString(nil) && 
+    policyCache[str].immutableHash in domain(immutablePolicyCache) && 
+    cache_policyHashes_policy(policyCache[str].policy, str, dict(policyDnsNameCache), inPerms)*/
+requires PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), inPerms)
+requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+requires parentPolicyHash in domain(policyCache) && unfolding PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), inPerms) in policyCache[parentPolicyHash].policy == parentPolicy
+preserves acc(&MSS)
+ensures outPerms > 0 && outPerms <= inPerms
+ensures acc(policy, outPerms)
+ensures policy_IssuerHash(policy.IssuerHash, outPerms)
+ensures acc(&policyCache)
+ensures acc(&immutablePolicyCache)
+ensures acc(&policyDnsNameCache)
+ensures acc(&ignoredPolicyHashes)
+ensures acc(immutablePolicyCache)
+ensures acc(policyCache)
+ensures acc(policyDnsNameCache)
+ensures acc(ignoredPolicyHashes)
+ensures immutableIssuerPolicyHash in domain(immutablePolicyCache)
+/*ensures forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> 
+    acc(immutablePolicyCache[str])
+ensures forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) && str != immutableIssuerPolicyHash ==>  ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache))
+ensures let hashes := immutablePolicyCache[immutableIssuerPolicyHash].policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k]) && hashes[k] in domain(policyCache))*/
+ensures ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache), perm(1))
+
+/*ensures forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
+    acc(policyCache[str]) && 
+    policyCache[str].immutableHash != base64.StdEncoding.EncodeToString(nil) && 
+    policyCache[str].immutableHash in domain(immutablePolicyCache) && 
+    cache_policyHashes_policy(policyCache[str].policy, str, dict(policyDnsNameCache), outPerms)*/
+ensures PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms)
+ensures PolicyDnsNameCachePermissions(dict(policyDnsNameCache)) 
+ensures parentPolicyHash in domain(policyCache) && unfolding PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache), outPerms) in policyCache[parentPolicyHash].policy == parentPolicy
+ensures forall str string :: old(str in domain(immutablePolicyCache)) ==> (str in domain(immutablePolicyCache) && (let elem, _ := immutablePolicyCache[str] in elem) == old(let elem, _ := immutablePolicyCache[str] in elem))
 func verifyPolicyAndAllocateCaches(
 	policy *common.PolicyCertificate,
 	parentPolicy *common.PolicyCertificate,
 	policyHash string,
 	immutablePolicyHash string,
-	immutableIssuerPolicyHash string) bool {
-	err := verifyChildWithParentPolicy(policy, parentPolicy)
+	immutableIssuerPolicyHash string,
+	//ghost cachePerms perm,
+	ghost inPerms perm,
+	ghost parentPolicyHash string) (res bool, ghost outPerms perm) /*{ // added return param name
+	ghost outPerms = inPerms
+	unfold cache_policyHashes_policy(parentPolicy, parentPolicyHash, dict(policyDnsNameCache), outPerms)
+	err := verifyChildWithParentPolicy(policy, parentPolicy, outPerms / 2)
+	fold cache_policyHashes_policy(parentPolicy, parentPolicyHash, dict(policyDnsNameCache), outPerms)
 
 	// if policy is a valid child of parentPolicy, allocate new cache entries
 	if err == nil {
 		allocatePolicyCacheEntries(policy, policyHash, immutablePolicyHash, immutableIssuerPolicyHash)
-		return true
+		return true, outPerms
 	} else {
+		// TODO I THINK THIS IS INCORRECT -> COPY PASTE MISTAKE!!!!!
 		// ignore certificate for future requests if it wasn't added to the cache
 		// (e.g., because it was already expired)
-		ignoredCertificateHashes[policyHash] = struct{}{}
-		return false
+		/*ignoredCertificateHashes[policyHash] = struct{}{}
+		return false, outPerms*//*
+
+
+		// CORRECT VERSION?!
+		ignoredPolicyHashes[policyHash] = struct{}{}
+		return false, outPerms
 	}
-}
+}*/
+
 
 // check a policy against a parent policy
 // checks whether parent verifies the child signature.
 // if the signature does not verify or some other constraint is violated, returns an error
 // otherwise, if the validation succeeds, it returns nil
-func verifyChildWithParentPolicy(policy *common.PolicyCertificate, parentPolicy *common.PolicyCertificate) error {
+requires policyPerms > 0
+preserves acc(policy, policyPerms)
+preserves acc(parentPolicy, policyPerms)
+preserves acc(&MSS)
+func verifyChildWithParentPolicy(policy *common.PolicyCertificate, parentPolicy *common.PolicyCertificate, ghost policyPerms perm) error {
 	// TODO (cyrill): do policy validity check: validity period, domain constraints, ...
 
 	// TODO (cyrill): do parent-child validity check: validity period of child is within parent, Child domain is sub-domain of parent domain, ...
 
 	now := time.Now()
-	err := crypto.VerifyIssuerSignature(parentPolicy, policy)
+	err := crypto.VerifyIssuerSignature(parentPolicy, policy, policyPerms / 2)
 	MSS = MSS + time.Now().Sub(now).Milliseconds()
 	if err != nil {
 		return fmt.Errorf("Failed to verify issuer signature: %s", err)
@@ -279,7 +521,7 @@ func verifyChildWithParentPolicy(policy *common.PolicyCertificate, parentPolicy 
 func allocatePolicyCacheEntries(policy *common.PolicyCertificate,
 	policyHash string,
 	immutablePolicyHash string,
-	immutableIssuerPolicyHash string) {
+	immutableIssuerPolicyHash string) /*{
 	fmt.Printf("allocating policy: imm hash = %s, imm issuer hash = %s\n", immutablePolicyHash, immutableIssuerPolicyHash)
 
 	// add to policy cache
@@ -305,15 +547,19 @@ func allocatePolicyCacheEntries(policy *common.PolicyCertificate,
 	// add to dns cache
 	policyDnsNameCache[policy.Domain()] = append(policyDnsNameCache[policy.Domain()], policyHash)
 }
-
-// compute the base64 encoded issuer hash field
-func getIssuerHash(policy *common.PolicyCertificate) string {
+*/
+// compute the base64 encoded issuer hash field 
+decreases
+requires acc(policy) && acc(policy.IssuerHash)
+pure func getIssuerHash(policy *common.PolicyCertificate) string {
 	return base64.StdEncoding.EncodeToString(policy.IssuerHash)
 }
 
 // compute the base64 encoded hash over the immutable fields of the
 // policy certificate
-func getImmutablePolicyHash(policy *common.PolicyCertificate) string {
+requires policyPerms > 0
+preserves acc(policy, policyPerms)
+func getImmutablePolicyHash(policy *common.PolicyCertificate, ghost policyPerms perm) string {
 	hash, err := crypto.ComputeHashAsSigner(policy)
 	if err != nil {
 		log.Fatalf("Failed to compute hash over immutable policy certificate fields: %s", err)
@@ -322,7 +568,9 @@ func getImmutablePolicyHash(policy *common.PolicyCertificate) string {
 }
 
 // compute the base64 encoded hash of a policy certificate
-func getPolicyHash(policy *common.PolicyCertificate) string {
+requires policyPerms > 0
+preserves acc(policy, policyPerms)
+func getPolicyHash(policy *common.PolicyCertificate, ghost policyPerms perm) string {
 	h := sha256.New()
 	json, err := common.ToJSON(policy)
 	if err != nil {
