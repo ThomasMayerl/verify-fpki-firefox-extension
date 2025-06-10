@@ -219,7 +219,10 @@ func InitializeCache(trustStoreDir string) int /*{
 // takes a list of certificate hashes
 // and returns a list containing all certificate hashes
 // from the input that are not yet cached
-func GetMissingCertificateHashesList(certificateHashes []string) []string /*{
+// TODO FOR NOW WE DON'T WORRY ABOUT PERMISSION TO THE CERTIFICATE CACHE
+requires forall k int :: {&certificateHashes[k]} 0 <= k && k < len(certificateHashes) ==> acc(&certificateHashes[k])
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k]) 
+func GetMissingCertificateHashesList(certificateHashes []string) (res []string) /*{ // Added return param names
 
 	var missingCertificateHashes []string
 	for _, certificateHash := range certificateHashes {
@@ -470,7 +473,9 @@ func processCertificate(certificate *x509.Certificate,
 // adds a list of certificates to the cache
 // TODO: pot. hashing the certificates is unnecessary as the hashes might already
 // be available from the first mapserver response
-func AddCertificatesToCache(certificates []*x509.Certificate) []string /*{
+requires forall k int :: {&certificates[k]} 0 <= k && k < len(certificates) ==> acc(&certificates[k])// && acc(certificates[k])
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func AddCertificatesToCache(certificates []*x509.Certificate) (res []string) /*{ // added return param names
 
 	nEntriesBefore := len(certificateCache)
 	now := time.Now()

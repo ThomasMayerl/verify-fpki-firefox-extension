@@ -8,7 +8,7 @@ import (
 
 pred acc_leafHashes(hashes []string) {
 	//forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], _)
-	forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k])
+	forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k])
 }
 
 pred cache_SPCT(spct *common.SignedPolicyCertificateTimestamp, l int, ghost policyPerm perm) {
@@ -25,21 +25,27 @@ pred policy_IssuerHash(issuerHash []byte, ghost policyPerm perm) {
 
 // If we include this directly in PolicyCachePermissions instead of putting it like this into a separate predicate it will not terminate upon a verification error after unfold
 pred cache_policyHashes_policy(policy *common.PolicyCertificate, hash string, ghost policyDnsNameCache dict[string][]string, ghost policyPerm perm) {
-	policyPerm > 0 && acc(policy, policyPerm) && policy.Domain() in domain(policyDnsNameCache) && cache_SPCTs(policy.SPCTs, policyPerm) && policy_IssuerHash(policy.IssuerHash, policyPerm)
+	policyPerm > 0 &&
+	acc(policy, policyPerm) && 
+	policy.Domain() in domain(policyDnsNameCache) && cache_SPCTs(policy.SPCTs, policyPerm) && policy_IssuerHash(policy.IssuerHash, policyPerm)
 }
 
 pred ImmutablePolicyCachePermissions_policyHashes(hashes []string, immutableHash string, ghost policyCache dict[string]*PolicyCacheEntry) {
     len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k]) && hashes[k] in domain(policyCache)
 }
 
-pred ImmutablePolicyCachePermissions(ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, ghost policyCache dict[string]*PolicyCacheEntry, ghost cachePerms perm) {
+pred ImmutablePolicyCachePermissions(ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, ghost policyCache dict[string]*PolicyCacheEntry, ghost cachePerms perm) { // cachePerms only relevant for issuerHash to prove that it doesn't change upon recursion
     cachePerms > 0 && 
-    forall str string :: {immutablePolicyCache[str]} str in domain(immutablePolicyCache) ==> 
-    acc(immutablePolicyCache[str], cachePerms) &&
-    ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)
+    (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
+    (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp)) &&
+	(forall str string :: {&immutablePolicyCache[str].immutableIssuerHash} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].immutableIssuerHash, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains))
 }
 
-pred PolicyCachePermissions_ImmutableHash(immutableHash string, ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry) {
+pred PolicyCachePermissions_ImmutableHash(immutableHash string, policyHash string, ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry) {
 	immutableHash != base64.StdEncoding.EncodeToString(nil) && 
     immutableHash in domain(immutablePolicyCache) 
 }
@@ -48,7 +54,7 @@ pred PolicyCachePermissions(ghost policyCache dict[string]*PolicyCacheEntry, gho
     perms > 0 &&
     forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
     acc(policyCache[str]) && 
-    PolicyCachePermissions_ImmutableHash(policyCache[str].immutableHash, immutablePolicyCache) && // We don't need these invariants in a lot of places -> put into separate predicate to not carry quantifier around
+    PolicyCachePermissions_ImmutableHash(policyCache[str].immutableHash, str, immutablePolicyCache) && // We don't need these invariants in a lot of places -> put into separate predicate to not carry quantifier around
     cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache, perms) //acc(policyCache[str].policy, perms) && cache_SPCTs(policyCache[str].policy.SPCTs, perms)
 }
 
@@ -57,7 +63,7 @@ pred PolicyDnsNameCachePermissions(ghost policyDnsNameCache dict[string][]string
 }
 
 pred acc_inj_chainCertificate(cert *common.PolicyCertificate, i int, ghost policyDnsNameCache dict[string][]string, ghost policyPerm perm, chain *PolicyCertificateChain) { // chain s.t. we do not have issues to folding the cert twice for two chains
-	policyPerm > 0 && acc(cert, policyPerm) && cert.Domain() in domain(policyDnsNameCache)
+	policyPerm > 0 && acc(cert, policyPerm) && cert.Domain() in domain(policyDnsNameCache) && cache_SPCTs(cert.SPCTs, policyPerm) && policy_IssuerHash(cert.IssuerHash, policyPerm)
 }
 
 pred acc_policyCertificateChain(chain *PolicyCertificateChain, ghost policyDnsNameCache dict[string][]string, ghost perms perm) {
@@ -73,7 +79,7 @@ pred acc_inj_policyCertificateChain(chain *PolicyCertificateChain, i int, ghost 
 }
 
 pred acc_inj_trustInfo_policy(policy *common.PolicyCertificate, i int, ghost perms perm) {
-	perms > 0 && acc(policy, perms)
+	perms > 0 && acc(policy, perms) && cache_SPCTs(policy.SPCTs, perms) && policy_IssuerHash(policy.IssuerHash, perms)
 }
 
 pred acc_inj_trustInfo_conflictingPolicyAttributes_attr(attr *ConflictingPolicyAttribute, i int) {
@@ -88,6 +94,7 @@ pred acc_trustInfo(trustInfo *PolicyTrustInfo, ghost policyDnsNameCache dict[str
 	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc(&trustInfo.PolicyChain[k])) &&
 	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, perms)) &&
 	len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) &&
-	let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache))
+	let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache)) &&
+	len(trustInfo.PolicyChain) >= 0
 }
 

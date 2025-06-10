@@ -1,0 +1,35 @@
+package cache_v2
+
+import (
+    "fpki/pkg/common"
+    mapCommon "fpki/pkg/mapserver/common"
+)
+
+pred acc_PoI(poi *mapCommon.PoI) { // add more attributes when needed
+    acc(&poi.ProofValue) && acc_bytes(poi.ProofValue) &&
+    acc(&poi.ProofType) && acc(&poi.Root) && acc(&poi.Proof) &&
+    acc(&poi.ProofKey) && acc_bytes(poi.ProofKey)
+}
+
+pred acc_bytes(arr []byte) {
+    forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k])
+}
+
+pred acc_SortedCertificateHashes(arr []*([common.SHA256Size]byte)/*[]*common.SHA256Output*/) {
+    forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k]) && acc(arr[k]) 
+}
+
+pred ProofCachePermissions_entry(proofCacheEntry *ProofCacheEntry, str string, mapserverInfoCache dict[string]*MapServerInfo) {
+    acc(proofCacheEntry) &&// not under quantifier - granting access to whole struct should not trigger termiantion issue upon verification error
+    acc_PoI(proofCacheEntry.poi) &&
+    acc_bytes(proofCacheEntry.treeHeadSignature) &&
+    acc_bytes(proofCacheEntry.calculatedLeafHash) &&
+    acc_bytes(proofCacheEntry.calculatedProofKey) &&
+    acc_SortedCertificateHashes(proofCacheEntry.sortedCertificateHashes) &&
+    (proofCacheEntry.lastError != nil ==> proofCacheEntry.lastError.ErrorMem()) &&
+    proofCacheEntry.mapserverID in domain(mapserverInfoCache)
+}
+
+pred ProofCachePermissions(proofCache dict[string]*ProofCacheEntry, mapserverInfoCache dict[string]*MapServerInfo) {
+    forall str string :: {str in domain(proofCache)} str in domain(proofCache) ==> ProofCachePermissions_entry(proofCache[str], str, mapserverInfoCache)
+}

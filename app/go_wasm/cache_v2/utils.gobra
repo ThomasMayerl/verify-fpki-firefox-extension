@@ -143,13 +143,16 @@ func maxTime(times ...time.Time) (maxTime time.Time) {
 	return
 }
 
-// TODO: Was generic before. Could be that this does not work
+// TODO: Changed from generic to string
 requires forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
 ensures forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
-func TransformListToInterfaceType(list []any) []interface{} {
+ensures len(list) == len(res)
+ensures forall k int :: 0 <= k && k < len(res) ==> acc(&res[k])
+func TransformListToInterfaceType(list []string) (res []interface{}) { // added return param name
 	t := make([]interface{}, len(list))
 	invariant forall k int :: 0 <= k && k < len(list) ==> acc(&list[k])
 	invariant forall k int :: 0 <= k && k < len(t) ==> acc(&t[k])
+	invariant len(t) == len(list)
 	for i, e := range list {
 		t[i] = e
 	}
@@ -178,7 +181,8 @@ func TransformNestedListsToInterfaceType(list [][]any) []interface{} {
 
 requires forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
 ensures forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
-func SliceToSet(slice []string) map[string]struct{} {
+ensures acc(res)
+func SliceToSet(slice []string) (res map[string]struct{}) { // Added return param name
 	setVar := make(map[string]struct{})
 	invariant forall k int :: 0 <= k && k < len(slice) ==> acc(&slice[k])
 	invariant acc(setVar)
@@ -189,6 +193,7 @@ func SliceToSet(slice []string) map[string]struct{} {
 }
 
 // compute the base64 encoded hash of the base64 encoded payload
+ensures payload != nil
 ensures forall k int :: {&payload[k]} 0 <= k && k < len(payload) ==> acc(&payload[k])
 func GetPayloadAndHash(b64payload string) (payload []byte, str string) { // added names to return parameters
 	payload, err := base64.StdEncoding.DecodeString(b64payload)
