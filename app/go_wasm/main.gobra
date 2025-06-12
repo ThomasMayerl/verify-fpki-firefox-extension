@@ -193,10 +193,10 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 (forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].IssuerHash, outPerms) && cache_v2.policy_IssuerHash(policyPayloads[k].IssuerHash, outPerms)) &&
 (forall k int :: {&policyPayloads[k].TimeStamp} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].TimeStamp, outPerms)) &&
 (forall k int :: {&policyPayloads[k].DomainField} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].DomainField, outPerms)) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) ) &&//&& (forall l int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains[l]} 0 <= l && l < len(policyPayloads[k].PolicyAttributes.ExcludedSubdomains) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains[l], outPerms))) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) )&&//&& (forall l int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains[l]} 0 <= l && l < len(policyPayloads[k].PolicyAttributes.DisallowedSubdomains) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains[l], outPerms))) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) )&&//&& (forall l int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains[l]} 0 <= l && l < len(policyPayloads[k].PolicyAttributes.AllowedSubdomains) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains[l], outPerms))) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) )//&& (forall l int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs[l]} 0 <= l && l < len(policyPayloads[k].PolicyAttributes.AllowedCAs) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs[l], outPerms)))
+(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms)) &&
+(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms)) &&
+(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms)) &&
+(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms))
 		invariant forall k int :: {&certificateHashes[k]} 0 <= k && k < len(certificateHashes) ==> acc(&certificateHashes[k])
 		invariant forall k int :: {&certificatePayloads[k]} 0 <= k && k < len(certificatePayloads) ==> acc(&certificatePayloads[k])// && acc(certificatePayloads[k])
 		invariant acc(certificateMissingIDSet)
@@ -234,6 +234,14 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 				fold cache_v2.cache_SPCTs(policy.SPCTs, outPerms)
 				unfold common.policy_IssuerHash(policy.IssuerHash)
 				fold cache_v2.policy_IssuerHash(policy.IssuerHash, outPerms)
+				unfold common.acc_strs(policy.PolicyAttributes.AllowedCAs)
+				fold cache_v2.acc_strs(policy.PolicyAttributes.AllowedCAs, outPerms)
+				unfold common.acc_strs(policy.PolicyAttributes.AllowedSubdomains)
+				fold cache_v2.acc_strs(policy.PolicyAttributes.AllowedSubdomains, outPerms)
+				unfold common.acc_strs(policy.PolicyAttributes.DisallowedSubdomains)
+				fold cache_v2.acc_strs(policy.PolicyAttributes.DisallowedSubdomains, outPerms)
+				unfold common.acc_strs(policy.PolicyAttributes.ExcludedSubdomains)
+				fold cache_v2.acc_strs(policy.PolicyAttributes.ExcludedSubdomains, outPerms)
 				policyPayloads = append(outPerms / 2, policyPayloads, policy/*.(*common.PolicyCertificate)*/)
 				policyHashes = append(perm(1), policyHashes, hash)
 			} else {
@@ -525,6 +533,13 @@ func verifyLegacyWrapper() js.Func /*{
 	return jsf
 }*/
 
+requires perms > 0
+requires cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(attrs, k, perms)
+ensures err == nil 
+ensures res != nil 
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func marshalConflictingPolicyAttributes(attrs *cache_v2.ConflictingPolicyAttribute, ghost k int, ghost perms perm) (res []byte, err error) // TOOD REFINE ERROR HANDLING
+
 // wrapper to make VerifyPolicy visible from JavaScript
 // param 1: the dns name the client connects to
 // param 2: JSON encoded certificate chain received in the
@@ -643,7 +658,7 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 		invariant dict(cache_v2.policyDnsNameCache) === oldDnsCache
 		invariant acc(policyTrustInfo) &&
 	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k])) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k)) &&
+	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k, outPerms)) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k])) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k, outPerms)) &&
 	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) &&
@@ -668,8 +683,9 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 		//invariant cache_v2.policyDnsNameCache === old(cache_v2.policyDnsNameCache)
 		invariant dict(cache_v2.policyDnsNameCache) === oldDnsCache
 		invariant acc(policyTrustInfo) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k])) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k)) &&
+	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k]))
+	invariant 0 <= i && i <= len(policyTrustInfo.ConflictingPolicyAttributes)
+	invariant (forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} i <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k, outPerms)) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k])) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k, outPerms)) &&
 	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) &&
@@ -678,10 +694,10 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 	invariant len(policyTrustInfo.ConflictingPolicyAttributes) == len(conflictingPolicies)
 	invariant forall k int :: {&conflictingPolicies[k]} 0 <= k && k < len(conflictingPolicies) ==> acc(&conflictingPolicies[k])
 		//for i, attributes := range policyTrustInfo.ConflictingPolicyAttributes { // WHY DOES THIS NOT WORK?
-		invariant 0 <= i && i <= len(policyTrustInfo.ConflictingPolicyAttributes)
 		for i := 0; i < len(policyTrustInfo.ConflictingPolicyAttributes); i++ {
 			attributes := policyTrustInfo.ConflictingPolicyAttributes[i]
-			json, err := json.Marshal(attributes) // TODO CHANGE MARSHAL SO THAT IT REQUIRES ACC TO EVERYTHING INSIDE
+			//json, err := json.Marshal(attributes) // TODO CHANGE MARSHAL SO THAT IT REQUIRES ACC TO EVERYTHING INSIDE
+			json, err := marshalConflictingPolicyAttributes(attributes, i, outPerms)
 			if err != nil {
 				panic(err.Error())
 			}

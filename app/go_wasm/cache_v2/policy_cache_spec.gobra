@@ -27,7 +27,7 @@ pred policy_IssuerHash(issuerHash []byte, ghost policyPerm perm) {
 pred cache_policyHashes_policy(policy *common.PolicyCertificate, hash string, ghost policyDnsNameCache dict[string][]string, ghost policyPerm perm) {
 	policyPerm > 0 &&
 	acc(policy, policyPerm) && 
-	policy.Domain() in domain(policyDnsNameCache) && cache_SPCTs(policy.SPCTs, policyPerm) && policy_IssuerHash(policy.IssuerHash, policyPerm)
+	policy.Domain() in domain(policyDnsNameCache) && cache_SPCTs(policy.SPCTs, policyPerm) && policy_IssuerHash(policy.IssuerHash, policyPerm) && acc_strs(policy.PolicyAttributes.AllowedCAs, policyPerm) && acc_strs(policy.PolicyAttributes.AllowedSubdomains, policyPerm) && acc_strs(policy.PolicyAttributes.DisallowedSubdomains, policyPerm) && acc_strs(policy.PolicyAttributes.ExcludedSubdomains, policyPerm)
 }
 
 pred ImmutablePolicyCachePermissions_policyHashes(hashes []string, immutableHash string, ghost policyCache dict[string]*PolicyCacheEntry) {
@@ -62,8 +62,13 @@ pred PolicyDnsNameCachePermissions(ghost policyDnsNameCache dict[string][]string
     forall str string :: {policyDnsNameCache[str]} str in domain(policyDnsNameCache) ==> let leafHashes, ok := policyDnsNameCache[str] in len(leafHashes) > 0 && acc_leafHashes(leafHashes)
 }
 
+pred acc_strs(arr []string, policyPerms perm) {
+	policyPerms > 0 &&
+	forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k], policyPerms)
+}
+
 pred acc_inj_chainCertificate(cert *common.PolicyCertificate, i int, ghost policyDnsNameCache dict[string][]string, ghost policyPerm perm, chain *PolicyCertificateChain) { // chain s.t. we do not have issues to folding the cert twice for two chains
-	policyPerm > 0 && acc(cert, policyPerm) && cert.Domain() in domain(policyDnsNameCache) && cache_SPCTs(cert.SPCTs, policyPerm) && policy_IssuerHash(cert.IssuerHash, policyPerm)
+	policyPerm > 0 && acc(cert, policyPerm) && cert.Domain() in domain(policyDnsNameCache) && cache_SPCTs(cert.SPCTs, policyPerm) && policy_IssuerHash(cert.IssuerHash, policyPerm) && acc_strs(cert.PolicyAttributes.AllowedCAs, policyPerm) && acc_strs(cert.PolicyAttributes.AllowedSubdomains, policyPerm) && acc_strs(cert.PolicyAttributes.DisallowedSubdomains, policyPerm) && acc_strs(cert.PolicyAttributes.ExcludedSubdomains, policyPerm)
 }
 
 pred acc_policyCertificateChain(chain *PolicyCertificateChain, ghost policyDnsNameCache dict[string][]string, ghost perms perm) {
@@ -79,18 +84,26 @@ pred acc_inj_policyCertificateChain(chain *PolicyCertificateChain, i int, ghost 
 }
 
 pred acc_inj_trustInfo_policy(policy *common.PolicyCertificate, i int, ghost perms perm) {
-	perms > 0 && acc(policy, perms) && cache_SPCTs(policy.SPCTs, perms) && policy_IssuerHash(policy.IssuerHash, perms)
+	perms > 0 && acc(policy, perms) && cache_SPCTs(policy.SPCTs, perms) && policy_IssuerHash(policy.IssuerHash, perms) && acc_strs(policy.PolicyAttributes.AllowedCAs, perms) && acc_strs(policy.PolicyAttributes.AllowedSubdomains, perms) && acc_strs(policy.PolicyAttributes.DisallowedSubdomains, perms) && acc_strs(policy.PolicyAttributes.ExcludedSubdomains, perms)
 }
 
-pred acc_inj_trustInfo_conflictingPolicyAttributes_attr(attr *ConflictingPolicyAttribute, i int) {
-	acc(attr) //&& acc(attr.Attribute)
+pred acc_policyAttributes(attr *common.PolicyAttributes, ghost perms perm) {
+	perms > 0 && 
+	acc(&attr.AllowedCAs) && acc(&attr.AllowedSubdomains) && acc(&attr.DisallowedSubdomains) && acc(&attr.ExcludedSubdomains) &&
+	acc_strs(attr.AllowedCAs, perms) &&
+	acc_strs(attr.AllowedSubdomains, perms) && 
+	acc_strs(attr.DisallowedSubdomains, perms) &&
+	acc_strs(attr.ExcludedSubdomains, perms)
 }
 
+pred acc_inj_trustInfo_conflictingPolicyAttributes_attr(attr *ConflictingPolicyAttribute, i int, ghost perms perm) {
+	acc(attr) && acc_policyAttributes(attr.Attribute, perms)
+}
 
 pred acc_trustInfo(trustInfo *PolicyTrustInfo, ghost policyDnsNameCache dict[string][]string, ghost perms perm) {
 	acc(trustInfo) &&
 	(forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc(&trustInfo.ConflictingPolicyAttributes[k])) &&
-	(forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc_inj_trustInfo_conflictingPolicyAttributes_attr(trustInfo.ConflictingPolicyAttributes[k], k)) &&
+	(forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc_inj_trustInfo_conflictingPolicyAttributes_attr(trustInfo.ConflictingPolicyAttributes[k], k, perms)) &&
 	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc(&trustInfo.PolicyChain[k])) &&
 	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k, perms)) &&
 	len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) &&
