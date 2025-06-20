@@ -83,20 +83,26 @@ var proofCache@ = map[string]*ProofCacheEntry{}
 
 type MapStrAny map[string]interface{}
 
+requires acc(m)
+ensures res === let elem, ok := m[str] in elem
+decreases
+pure func getFromMap(m map[string]interface{}, str string) (res interface{})
+
 requires acc(configMap)
 requires "mapservers" in domain(configMap)
 requires let conf, _ := configMap["mapservers"] in typeOf(conf) == type[[]MapStrAny]
-requires let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]interface{}) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k])))
-requires let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]interface{}) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> let e := mapserversJSON[k].(map[string]interface{}) in ("identity" in domain(e) && "publickey" in domain(e))))
+requires let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]MapStrAny) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k]) && acc(mapserversJSON[k]) && let e := mapserversJSON[k] in ("identity" in domain(e) && typeOf(getFromMap(e, "identity")) == type[string] && "publickey" in domain(e) && typeOf(getFromMap(e, "publickey")) == type[string])))
 requires acc(&mapserverInfoCache)
 requires acc(&proofCache)
-preserves forall str string :: {mapserverInfoCache[str]} str in mapserverInfoCache ==> acc(mapserverInfoCache[str]) && acc(mapserverInfoCache[str].publicKey)
 ensures acc(configMap)
 ensures acc(&mapserverInfoCache)
 ensures acc(&proofCache)
 ensures acc(mapserverInfoCache)
+ensures forall str string :: {mapserverInfoCache[str]} str in mapserverInfoCache ==> acc(mapserverInfoCache[str]) && acc(mapserverInfoCache[str].publicKey)
 ensures acc(proofCache) && len(proofCache) == 0
 ensures ProofCachePermissions(dict(proofCache), dict(mapserverInfoCache))
+ensures let conf, _ := configMap["mapservers"] in typeOf(conf) == type[[]MapStrAny]
+ensures let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]MapStrAny) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k]) && acc(mapserversJSON[k]) && let e := mapserversJSON[k] in ("identity" in domain(e) && typeOf(getFromMap(e, "identity")) == type[string] && "publickey" in domain(e) && typeOf(getFromMap(e, "publickey")) == type[string])))
 func InitializeMapserverInfoCache(configMap map[string]interface{}) bool {
 	mapserverInfoCache = map[string]*MapServerInfo{}
 	proofCache = map[string]*ProofCacheEntry{}
@@ -104,20 +110,25 @@ func InitializeMapserverInfoCache(configMap map[string]interface{}) bool {
 	identities := []string{}
 	//mapserversJSON := configMap["mapservers"].([]interface{})
 	tmp, _ := configMap["mapservers"]
-	mapserversJSON := tmp.([]interface{})
+	// VERIFY: we directly cast it to [](map[string]interface{}) instead of casting it to []interface{} and then again
+	mapserversJSON := tmp.([]MapStrAny)
+
+	fold ProofCachePermissions(dict(proofCache), dict(mapserverInfoCache))
+
 	invariant acc(&mapserverInfoCache)
 	invariant acc(&proofCache)
 	invariant acc(mapserverInfoCache)
+	invariant forall str string :: {mapserverInfoCache[str]} str in mapserverInfoCache ==> acc(mapserverInfoCache[str]) && acc(mapserverInfoCache[str].publicKey)
 	invariant acc(proofCache) && len(proofCache) == 0
 	invariant ProofCachePermissions(dict(proofCache), dict(mapserverInfoCache))
-	invariant acc(mapserversJSON)
-	invariant forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k]) && let e := mapserversJSON[k].(map[string]interface{}) in ("identity" in domain(e) && "publickey" in domain(e))
+	invariant forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k]) && acc(mapserversJSON[k]) && let e := mapserversJSON[k] in ("identity" in domain(e) && typeOf(getFromMap(e, "identity")) == type[string] && "publickey" in domain(e) && typeOf(getFromMap(e, "publickey")) == type[string])
+	invariant forall k int :: {&identities[k]} 0 <= k && k < len(identities) ==> acc(&identities[k])
 	for _, entryInterface := range mapserversJSON {
-		entry := entryInterface.(map[string]interface{})
-		identity, _ := entry["identity"]
+		entry := entryInterface // VERIFY: nothing really happens here because we already casted above
+		identity/*, _*/ := entry["identity"] // TODO WHY DO WE NOT GET TWO THINGS BACK?
 		id := identity.(string)
-		publicKeyDERBase64, ok := entry["publickey"]
-		if ok {
+		publicKeyDERBase64/*, ok*/ := entry["publickey"] // TODO WHY DO WE NOT GET TWO THINGS BACK?
+		//if ok {
 			publicKey, err := util.DERBase64ToRSAPublic(publicKeyDERBase64.(string))
 			if err != nil {
 				log.Panicf("Cannot extract RSA public key from DER: %s", err)
@@ -127,9 +138,9 @@ func InitializeMapserverInfoCache(configMap map[string]interface{}) bool {
 			fold ProofCachePermissions(dict(proofCache), dict(mapserverInfoCache))
 			identities = append(perm(1), identities, id)
 			
-		} else {
+		/*} else {
 			fmt.Printf("Ignoring map server without public key: %s\n", id)
-		}
+		}*/
 	}
 	fmt.Printf("Added %d map servers: %s\n", len(identities), identities)
 	return true

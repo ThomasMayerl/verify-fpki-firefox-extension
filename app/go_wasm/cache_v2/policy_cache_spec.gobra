@@ -6,7 +6,7 @@ import (
     "net/publicsuffix"
 )
 
-pred acc_leafHashes(hashes []string) {
+pred acc_leafHashes(hashes []string, str string) {
 	//forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], _)
 	forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k])
 }
@@ -59,7 +59,7 @@ pred PolicyCachePermissions(ghost policyCache dict[string]*PolicyCacheEntry, gho
 }
 
 pred PolicyDnsNameCachePermissions(ghost policyDnsNameCache dict[string][]string) {
-    forall str string :: {policyDnsNameCache[str]} str in domain(policyDnsNameCache) ==> let leafHashes, ok := policyDnsNameCache[str] in len(leafHashes) > 0 && acc_leafHashes(leafHashes)
+    forall str string :: {policyDnsNameCache[str]} str in domain(policyDnsNameCache) ==> let leafHashes, ok := policyDnsNameCache[str] in len(leafHashes) > 0 && acc_leafHashes(leafHashes, str)
 }
 
 pred acc_strs(arr []string, policyPerms perm) {

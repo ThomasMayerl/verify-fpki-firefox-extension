@@ -39,10 +39,22 @@ type VerifyRequest struct {
 	ConnectionCertificateChainb64 []string
 }
 
+requires acc(m)
+ensures res === let elem, ok := m[str] in elem
+decreases
+pure func getFromMap(m map[string]interface{}, str string) (res interface{})
+
 // initialize all the GO datastructures
 // param 1: path to directory containing trust store certificates
 // param 2: path to config.js containing the legacy trust preference descriptions
 // Note: files must be within cache_v2/embedded
+// --- MUST BE GUARANTEED BY JS --- //
+// PRECONDITIONS FOR CONFIGMAP - WE ASSUME THAT IT'S ALREADY BEEN PARSED INSTEAD OF READING IT FROM configJSON HERE //
+requires acc(configMap)
+requires "mapservers" in domain(configMap)
+requires let conf, _ := configMap["mapservers"] in typeOf(conf) == type[[]cache_v2.MapStrAny]
+requires let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]cache_v2.MapStrAny) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k]) && acc(mapserversJSON[k]) && let e := mapserversJSON[k] in ("identity" in domain(e) && typeOf(getFromMap(e, "identity")) == type[string] && "publickey" in domain(e) && typeOf(getFromMap(e, "publickey")) == type[string])))
+// FURTHER PRECONDITIONS 
 requires acc(&cache_v2.MS)
 requires acc(&cache_v2.MSS)
 requires acc(&cache_v2.NCertificatesAdded)
@@ -52,6 +64,7 @@ preserves acc(&cache_v2.policyDnsNameCache)
 preserves acc(&cache_v2.ignoredPolicyHashes)
 preserves acc(&cache_v2.mapserverInfoCache)
 preserves acc(&cache_v2.proofCache)
+// THIS FUNCTION INITIALIZES THE INVARIANTS OVER THE DIFFERENT CACHES
 ensures acc(cache_v2.policyCache)
 ensures acc(cache_v2.immutablePolicyCache)
 ensures acc(cache_v2.policyDnsNameCache)
@@ -66,7 +79,7 @@ ensures forall str string :: {cache_v2.mapserverInfoCache[str]} str in cache_v2.
 ensures acc(&cache_v2.MS)
 ensures acc(&cache_v2.MSS)
 ensures acc(&cache_v2.NCertificatesAdded)
-func initializeGODatastructuresWrapper(trustStoreDir string, policyTrustStoreDir string, configJSON string) ([]interface{}, ghost outPerms perm) /*js.Func*/ { // rewrote to directly have args and return var
+func initializeGODatastructuresWrapper(trustStoreDir string, policyTrustStoreDir string, configMap map[string]interface{}) ([]interface{}, ghost outPerms perm) /*js.Func*/ { // rewrote to directly have args and return var
 	/*jsf := js.FuncOf(func(this js.Value, args []js.Value) any {
 
 		trustStoreDir := args[0].String()
@@ -82,16 +95,10 @@ func initializeGODatastructuresWrapper(trustStoreDir string, policyTrustStoreDir
 
 		ghost outPerms = tmpPerms
 
-		/* TODO FIX THIS. THIS DOES NOT WORK IN GOBRA BECAUSE GOBRA DOES NOT SUPPORT GIVING ACCESS TO ANY (REGARDING Unmarshal).
+		/*
 		// decode JSON config
 		var configMap@ map[string]interface{}
 		json.Unmarshal([]byte(configJSON), &configMap)*/
-		// --- MUST BE GUARANTEED BY JS --- //
-		var configMap@ map[string]interface{}
-		assume "mapservers" in domain(configMap)
-		assume let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]interface{}) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> acc(&mapserversJSON[k])))
-		assume let conf, _ := configMap["mapservers"] in (let mapserversJSON := conf.([]interface{}) in (forall k int :: {&mapserversJSON[k]} 0 <= k && k < len(mapserversJSON) ==> let e := mapserversJSON[k].(map[string]interface{}) in ("identity" in domain(e) && "publickey" in domain(e))))
-
 
 		// initialize validation data structures
 		cache_v2.InitializeLegacyTrustPreferences(configMap)
@@ -186,17 +193,15 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 
 		invariant forall k int :: {&policyHashes[k]} 0 <= k && k < len(policyHashes) ==> acc(&policyHashes[k])
 		invariant forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k]) 
-		//invariant forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> (forall l int :: {&policyPayloads[l].SPCTs} 0 <= l && l < len(policyPayloads) && k != l ==> &policyPayloads[k].SPCTs != &policyPayloads[l].SPCTs)
 		invariant (forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].SPCTs, outPerms)) 
-		//invariant forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> (forall l int :: {&policyPayloads[l].SPCTs} 0 <= l && l < len(policyPayloads) && k != l ==> policyPayloads[k].SPCTs !== policyPayloads[l].SPCTs)
 		invariant (forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> cache_v2.cache_SPCTs(policyPayloads[k].SPCTs, outPerms)) &&
-(forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].IssuerHash, outPerms) && cache_v2.policy_IssuerHash(policyPayloads[k].IssuerHash, outPerms)) &&
-(forall k int :: {&policyPayloads[k].TimeStamp} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].TimeStamp, outPerms)) &&
-(forall k int :: {&policyPayloads[k].DomainField} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].DomainField, outPerms)) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms)) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms)) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms)) &&
-(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms))
+			(forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].IssuerHash, outPerms) && cache_v2.policy_IssuerHash(policyPayloads[k].IssuerHash, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].TimeStamp} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].TimeStamp, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].DomainField} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].DomainField, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms))
 		invariant forall k int :: {&certificateHashes[k]} 0 <= k && k < len(certificateHashes) ==> acc(&certificateHashes[k])
 		invariant forall k int :: {&certificatePayloads[k]} 0 <= k && k < len(certificatePayloads) ==> acc(&certificatePayloads[k])// && acc(certificatePayloads[k])
 		invariant acc(certificateMissingIDSet)
@@ -252,13 +257,11 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 		
 		processedCertificates := cache_v2.AddCertificatesToCache(certificatePayloads)
 		processedCertificatesOut := cache_v2.TransformListToInterfaceType(processedCertificates)
-
 		processedPolicies, tmp := cache_v2.AddPoliciesToCache(policyPayloads, outPerms)
 		ghost outPerms = tmp
 		processedPoliciesOut := cache_v2.TransformListToInterfaceType(processedPolicies)
 		
 		return processedCertificatesOut, processedPoliciesOut, outPerms
-		// TODO WHAT TO DO WITH THIS - just return values directly for now
 		/*
 		responseClass := js.Global().Get("AddMissingPayloadsResponseGo")
 		return responseClass.New(processedCertificatesOut, processedPoliciesOut)*/
