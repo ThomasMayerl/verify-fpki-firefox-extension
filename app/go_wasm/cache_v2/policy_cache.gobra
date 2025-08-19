@@ -65,7 +65,7 @@ preserves acc(&policyCache)
 preserves acc(&immutablePolicyCache)
 preserves acc(&policyDnsNameCache)
 preserves acc(&ignoredPolicyHashes)
-ensures outPerms > 0
+ensures outPerms > 0 && outPerms <= 1
 ensures acc(policyCache)
 ensures acc(immutablePolicyCache)
 ensures acc(policyDnsNameCache)
@@ -80,7 +80,8 @@ func InitializePolicyCache(trustStoreDir string) (res int, ghost outPerms perm) 
 	policyDnsNameCache = map[string][]string{}
 
 	fold PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache))
-	fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache),)
+	fold ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache))
+	fold ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache))
 	fold PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
 
 	files, err := cacheFileSystem.ReadDir(trustStoreDir)
@@ -214,7 +215,7 @@ func appendPolicyCertificate(arr []*common.PolicyCertificate, toAdd *common.Poli
 // adds a list of certificates to the cache
 // TODO: pot. hashing the certificates is unnecessary as the hashes might already
 // be available from the first mapserver response
-requires inPerms > 0
+requires inPerms > 0 && inPerms <= 1
 requires (forall k int :: {&policies[k]} 0 <= k && k < len(policies) ==> acc(&policies[k], _)) &&
 (forall k int :: {&policies[k].SPCTs} 0 <= k && k < len(policies) ==> acc(&policies[k].SPCTs, inPerms) && acc(cache_SPCTs(policies[k].SPCTs), inPerms)) &&
 (forall k int :: {&policies[k].IssuerHash} 0 <= k && k < len(policies) ==> acc(&policies[k].IssuerHash, inPerms) && acc(policy_IssuerHash(policies[k].IssuerHash), inPerms)) &&
@@ -236,7 +237,7 @@ requires acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache
 requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache))
 requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
 ensures outPerms <= inPerms
-ensures outPerms > 0
+ensures outPerms > 0 && outPerms <= 1
 ensures acc(&policyCache)
 ensures acc(policyCache)
 ensures acc(&immutablePolicyCache)
@@ -453,7 +454,7 @@ func refoldPolicySPCTs(policiesInRequest map[string][]*common.PolicyCertificate,
 // recursively processes parent certificates
 // returns the hashes of all processed certificates
 //requires cachePerms > 0
-requires inPerms > 0
+requires inPerms > 0 && inPerms <= 1
 requires policiesInRequestPerm > 0
 requires acc(policiesInRequestProcessed)
 requires acc(policiesInRequest, policiesInRequestPerm)
@@ -481,7 +482,7 @@ requires forall str string :: {str in domain(policiesInRequest)} str in domain(p
 requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == policy)
 preserves acc(&NCertificatesAdded)
 preserves acc(&MSS)
-ensures outPerms > 0 && outPerms <= inPerms
+ensures outPerms > 0 && outPerms <= inPerms && outPerms <= 1
 ensures acc(policiesInRequestProcessed)
 ensures acc(policiesInRequest, policiesInRequestPerm)
 ensures acc(&policyCache)
@@ -629,7 +630,7 @@ func processPolicy(policy *common.PolicyCertificate,
 // cache entries for the child if necessary
 // returns true if the policy was added to the cache and false if the
 // policy was added to the ignored policies
-requires inPerms > 0
+requires inPerms > 0 && inPerms <= 1
 requires acc(&policy.SPCTs, inPerms) && acc(cache_SPCTs(policy.SPCTs), inPerms) &&
 	acc(&policy.IssuerHash, inPerms) && acc(policy_IssuerHash(policy.IssuerHash), inPerms) &&
 	acc(&policy.TimeStamp, inPerms) &&
@@ -657,7 +658,7 @@ requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCach
 requires parentPolicyHash in domain(policyCache) && unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms) in policyCache[parentPolicyHash].policy == parentPolicy
 requires immutablePolicyHash != base64.StdEncoding.EncodeToString(nil)
 preserves acc(&MSS)
-ensures outPerms > 0 && outPerms <= inPerms
+ensures outPerms > 0 && outPerms <= inPerms && outPerms <= 1
 ensures acc(&policy.SPCTs, outPerms) && acc(cache_SPCTs(policy.SPCTs), outPerms) &&
 	acc(&policy.IssuerHash, outPerms) && acc(policy_IssuerHash(policy.IssuerHash), outPerms) &&
 	acc(&policy.TimeStamp, outPerms) &&
@@ -765,7 +766,7 @@ func refoldForNewPolicyCache(immutablePolicyCache dict[string]*ImmutablePolicyCa
 
 ghost decreases
 //requires outPerms <= inPerms
-requires outPerms > 0
+requires outPerms > 0 && outPerms <= 1
 //requires inPerms > 0
 requires forall str string :: {str in domain(oldPolicyDnsNameCache)} str in domain(oldPolicyDnsNameCache) ==> str in domain(policyDnsNameCache)
 // acc(..., 1/2) so we know that we don't change any other invariants!
@@ -774,7 +775,7 @@ ensures forall str string :: {policyCache[str]} str in domain(policyCache) && st
 func refoldPoliciesExceptForInclDns(policyCache dict[string]*PolicyCacheEntry, excl string, oldPolicyDnsNameCache dict[string][]string, policyDnsNameCache dict[string][]string, /*inPerms perm,*/ outPerms perm)
 // allocate entries in the certificateCache, dnsNameCache, subjectSKICache
 // if necessary (for non-root certificates)
-requires inPerms > 0
+requires inPerms > 0 && inPerms <= 1
 requires acc(&policy.SPCTs, inPerms) && acc(cache_SPCTs(policy.SPCTs), inPerms) &&
 	acc(&policy.IssuerHash, inPerms) && acc(policy_IssuerHash(policy.IssuerHash), inPerms) &&
 	acc(&policy.TimeStamp, inPerms) &&
@@ -800,7 +801,7 @@ requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policy
 requires acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms)
 requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
 requires immutablePolicyHash != base64.StdEncoding.EncodeToString(nil)
-ensures outPerms > 0 && outPerms <= inPerms
+ensures outPerms > 0 && outPerms <= inPerms && outPerms <= 1
 ensures acc(&policy.SPCTs, outPerms) && acc(cache_SPCTs(policy.SPCTs), outPerms) &&
 	acc(&policy.IssuerHash, outPerms) && acc(policy_IssuerHash(policy.IssuerHash), outPerms) &&
 	acc(&policy.TimeStamp, outPerms) &&
@@ -860,7 +861,7 @@ func allocatePolicyCacheEntries(policy *common.PolicyCertificate,
 			timestamp:           policy.TimeStamp,
 		}
 		ghost if immutableIssuerPolicyHash in domain(immutablePolicyCache) {
-			assume immutablePolicyCacheEntry.depth == immutablePolicyCache[immutableIssuerPolicyHash].depth + 1 // if we assign this directly in struct assignment above we will retrieve a gpointer and not a normal pointer
+			assume unfolding ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)) in (immutablePolicyCacheEntry.depth == immutablePolicyCache[immutableIssuerPolicyHash].depth + 1) // if we assign this directly in struct assignment above we will retrieve a gpointer and not a normal pointer
 		} else {
 			assume immutablePolicyCacheEntry.depth == 1
 		}
@@ -931,7 +932,7 @@ pure func getIssuerHash(policy *common.PolicyCertificate) (res string) { // adde
 requires policyPerms > 0
 preserves acc(policy, policyPerms)
 ensures policy != nil ==> res != base64.StdEncoding.EncodeToString(nil)
-ensures res == abstractGetImmutablePolicyHash(policy)
+ensures res == base64.StdEncoding.AbstractEncodeToString(crypto.abstractComputeHashAsSigner(policy))
 func getImmutablePolicyHash(policy *common.PolicyCertificate, ghost policyPerms perm) (res string) { // added return param name
 	hash, err := crypto.ComputeHashAsSigner(policy)
 	if err != nil {

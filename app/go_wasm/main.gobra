@@ -65,13 +65,14 @@ preserves acc(&cache_v2.ignoredPolicyHashes)
 preserves acc(&cache_v2.mapserverInfoCache)
 preserves acc(&cache_v2.proofCache)
 // THIS FUNCTION INITIALIZES THE INVARIANTS OVER THE DIFFERENT CACHES
+ensures outPerms > 0 && outPerms <= 1
 ensures acc(cache_v2.policyCache)
 ensures acc(cache_v2.immutablePolicyCache)
 ensures acc(cache_v2.policyDnsNameCache)
 ensures acc(cache_v2.ignoredPolicyHashes)
 ensures acc(cache_v2.mapserverInfoCache)
 ensures acc(cache_v2.proofCache)
-ensures cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), outPerms)
+ensures acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), outPerms)
 ensures cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 ensures cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 ensures cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -121,6 +122,7 @@ func initializeGODatastructuresWrapper(trustStoreDir string, policyTrustStoreDir
 // param 2: map server response containing encoded certificates
 // returns: an object containing a list of hashes of all certificates and policies provided as input
 // | INVARIANTS OVER CACHES | --- | ALWAYS HOLD IF JS DOES NOT TOUCH CACHES |
+requires inPerms > 0 && inPerms <= 1
 requires acc(&cache_v2.policyCache)
 requires acc(&cache_v2.immutablePolicyCache)
 requires acc(&cache_v2.policyDnsNameCache)
@@ -133,7 +135,7 @@ requires acc(cache_v2.policyDnsNameCache)
 requires acc(cache_v2.ignoredPolicyHashes)
 requires acc(cache_v2.proofCache)
 requires acc(cache_v2.mapserverInfoCache)
-requires cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), inPerms)
+requires acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), inPerms)
 requires cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 requires cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 requires cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -141,6 +143,7 @@ requires forall str string :: {cache_v2.mapserverInfoCache[str]} str in cache_v2
 requires acc(&cache_v2.MS)
 requires acc(&cache_v2.MSS)
 requires acc(&cache_v2.NCertificatesAdded)
+ensures outPerms > 0 && outPerms <= 1
 ensures acc(&cache_v2.policyCache)
 ensures acc(&cache_v2.immutablePolicyCache)
 ensures acc(&cache_v2.policyDnsNameCache)
@@ -153,7 +156,7 @@ ensures acc(cache_v2.policyDnsNameCache)
 ensures acc(cache_v2.ignoredPolicyHashes)
 ensures acc(cache_v2.proofCache)
 ensures acc(cache_v2.mapserverInfoCache)
-ensures cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), outPerms)
+ensures acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), outPerms)
 ensures cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 ensures cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 ensures cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -162,11 +165,9 @@ ensures acc(&cache_v2.MS)
 ensures acc(&cache_v2.MSS)
 ensures acc(&cache_v2.NCertificatesAdded)
 // | ADDITIONAL CONTRACT OF FUNCTION | --- | MUST BE GUARENTEED BY JS |
-requires inPerms > 0
 requires acc(mapserverResponse.CertificateIDs) && acc(mapserverResponse.PolicyIDs) && acc(mapserverResponse.Payloads)
 preserves acc(time.UTC, 1/2)
 ensures outPerms <= inPerms
-ensures outPerms > 0
 ensures forall k int :: {&processedCertificatesOut[k]} 0 <= k && k < len(processedCertificatesOut) ==> acc(&processedCertificatesOut[k])
 ensures forall k int :: {&processedPoliciesOut[k]} 0 <= k && k < len(processedPoliciesOut) ==> acc(&processedPoliciesOut[k])
 func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsResponse, ghost inPerms perm) (processedCertificatesOut []interface{}, processedPoliciesOut []interface{}, ghost outPerms perm)  /*js.Func*/ {
@@ -194,14 +195,14 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 		invariant forall k int :: {&policyHashes[k]} 0 <= k && k < len(policyHashes) ==> acc(&policyHashes[k])
 		invariant forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k]) 
 		invariant (forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].SPCTs, outPerms)) 
-		invariant (forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> cache_v2.cache_SPCTs(policyPayloads[k].SPCTs, outPerms)) &&
-			(forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].IssuerHash, outPerms) && cache_v2.policy_IssuerHash(policyPayloads[k].IssuerHash, outPerms)) &&
+		invariant (forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> acc(cache_v2.cache_SPCTs(policyPayloads[k].SPCTs), outPerms)) &&
+			(forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].IssuerHash, outPerms) && acc(cache_v2.policy_IssuerHash(policyPayloads[k].IssuerHash), outPerms)) &&
 			(forall k int :: {&policyPayloads[k].TimeStamp} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].TimeStamp, outPerms)) &&
 			(forall k int :: {&policyPayloads[k].DomainField} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].DomainField, outPerms)) &&
-			(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms)) &&
-			(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms)) &&
-			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms)) &&
-			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) && cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms))
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms) && acc(cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.ExcludedSubdomains), outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms) && acc(cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.DisallowedSubdomains), outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms) && acc(cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedSubdomains), outPerms)) &&
+			(forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms) && acc(cache_v2.acc_strs(policyPayloads[k].PolicyAttributes.AllowedCAs), outPerms))
 		invariant forall k int :: {&certificateHashes[k]} 0 <= k && k < len(certificateHashes) ==> acc(&certificateHashes[k])
 		invariant forall k int :: {&certificatePayloads[k]} 0 <= k && k < len(certificatePayloads) ==> acc(&certificatePayloads[k])// && acc(certificatePayloads[k])
 		invariant acc(certificateMissingIDSet)
@@ -229,24 +230,24 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 				invariant acc(&policy.SPCTs)
 				invariant oldSPCTs === policy.SPCTs
 				invariant forall k int :: {&policy.SPCTs[k]} i <= k && k < len(policy.SPCTs) ==> common.cache_SPCT(&policy.SPCTs[k], k)
-				invariant forall k int :: {&policy.SPCTs[k]} 0 <= k && k < i ==> cache_v2.cache_SPCT(&policy.SPCTs[k], k, outPerms)
+				invariant forall k int :: {&policy.SPCTs[k]} 0 <= k && k < i ==> acc(cache_v2.cache_SPCT(&policy.SPCTs[k], k), outPerms)
 				invariant outPerms == old(outPerms)
 				invariant 0 <= i && i <= len(policy.SPCTs)
 				for i := 0; i < len(policy.SPCTs); i++ {
 					unfold common.cache_SPCT(&policy.SPCTs[i], i)
-					fold cache_v2.cache_SPCT(&policy.SPCTs[i], i, outPerms)
+					fold acc(cache_v2.cache_SPCT(&policy.SPCTs[i], i), outPerms)
 				}
-				fold cache_v2.cache_SPCTs(policy.SPCTs, outPerms)
+				fold acc(cache_v2.cache_SPCTs(policy.SPCTs), outPerms)
 				unfold common.policy_IssuerHash(policy.IssuerHash)
-				fold cache_v2.policy_IssuerHash(policy.IssuerHash, outPerms)
+				fold acc(cache_v2.policy_IssuerHash(policy.IssuerHash), outPerms)
 				unfold common.acc_strs(policy.PolicyAttributes.AllowedCAs)
-				fold cache_v2.acc_strs(policy.PolicyAttributes.AllowedCAs, outPerms)
+				fold acc(cache_v2.acc_strs(policy.PolicyAttributes.AllowedCAs), outPerms)
 				unfold common.acc_strs(policy.PolicyAttributes.AllowedSubdomains)
-				fold cache_v2.acc_strs(policy.PolicyAttributes.AllowedSubdomains, outPerms)
+				fold acc(cache_v2.acc_strs(policy.PolicyAttributes.AllowedSubdomains), outPerms)
 				unfold common.acc_strs(policy.PolicyAttributes.DisallowedSubdomains)
-				fold cache_v2.acc_strs(policy.PolicyAttributes.DisallowedSubdomains, outPerms)
+				fold acc(cache_v2.acc_strs(policy.PolicyAttributes.DisallowedSubdomains), outPerms)
 				unfold common.acc_strs(policy.PolicyAttributes.ExcludedSubdomains)
-				fold cache_v2.acc_strs(policy.PolicyAttributes.ExcludedSubdomains, outPerms)
+				fold acc(cache_v2.acc_strs(policy.PolicyAttributes.ExcludedSubdomains), outPerms)
 				policyPayloads = append(outPerms / 2, policyPayloads, policy/*.(*common.PolicyCertificate)*/)
 				policyHashes = append(perm(1), policyHashes, hash)
 			} else {
@@ -274,6 +275,7 @@ func addMissingPayloadsWrapper(mapserverResponse MapServerMissingPayloadsRespons
 // param 2: map server response containing map server response
 // returns: a json object consisting of a MHT proof verification result, a list of hashes of all missing certificates, and a list of hashes of all missing policies
 // | INVARIANTS OVER CACHE | --- | ALWAYS HOLD IF JS DOES NOT TOUCH CACHES |
+requires inPerms > 0 && inPerms <= 1
 requires acc(&cache_v2.policyCache)
 requires acc(&cache_v2.immutablePolicyCache)
 requires acc(&cache_v2.policyDnsNameCache)
@@ -286,7 +288,7 @@ requires acc(cache_v2.policyDnsNameCache)
 requires acc(cache_v2.ignoredPolicyHashes)
 requires acc(cache_v2.proofCache)
 requires acc(cache_v2.mapserverInfoCache)
-requires cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), inPerms)
+requires acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), inPerms)
 requires cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 requires cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 requires cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -304,6 +306,7 @@ requires forall k int :: {&responses[k].PoI.ProofKey} 0 <= k && k < len(response
 requires forall k int :: {&responses[k].PoI.ProofValue} 0 <= k && k < len(responses) ==> cache_v2.acc_bytes(responses[k].PoI.ProofValue)
 requires forall k int :: {&responses[k].TreeHeadSig} 0 <= k && k < len(responses) ==> cache_v2.acc_bytes(responses[k].TreeHeadSig)
 // | INVARIANTS OVER CACHE | --- | ALWAYS HOLD IF JS DOES NOT TOUCH CACHES |
+ensures outPerms > 0 && outPerms <= 1
 ensures acc(&cache_v2.policyCache)
 ensures acc(&cache_v2.immutablePolicyCache)
 ensures acc(&cache_v2.policyDnsNameCache)
@@ -316,7 +319,7 @@ ensures acc(cache_v2.policyDnsNameCache)
 ensures acc(cache_v2.ignoredPolicyHashes)
 ensures acc(cache_v2.proofCache)
 ensures acc(cache_v2.mapserverInfoCache)
-ensures cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), outPerms)
+ensures acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), outPerms)
 ensures cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 ensures cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 ensures cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -365,7 +368,7 @@ func verifyAndGetMissingIDsWrapper(mapserverID string, responses []mapCommon.Map
 		invariant acc(cache_v2.ignoredPolicyHashes)
 		invariant acc(cache_v2.proofCache)
 		invariant acc(cache_v2.mapserverInfoCache)
-		invariant cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), outPerms)
+		invariant acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), outPerms)
 		invariant cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 		invariant cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 		invariant cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -537,7 +540,7 @@ func verifyLegacyWrapper() js.Func /*{
 }*/
 
 requires perms > 0
-requires cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(attrs, k, perms)
+requires acc(cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(attrs, k), perms)
 ensures err == nil 
 ensures res != nil 
 ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
@@ -551,6 +554,7 @@ func marshalConflictingPolicyAttributes(attrs *cache_v2.ConflictingPolicyAttribu
 // connection attempt
 // this function returns a JavaScript object that is cached on the JS side
 // | INVARIANTS OVER CACHE | --- | ALWAYS HOLD IF JS DOES NOT TOUCH CACHES |
+requires inPerms > 0 && inPerms <= 0
 requires acc(&cache_v2.policyCache)
 requires acc(&cache_v2.immutablePolicyCache)
 requires acc(&cache_v2.policyDnsNameCache)
@@ -563,7 +567,7 @@ requires acc(cache_v2.policyDnsNameCache)
 requires acc(cache_v2.ignoredPolicyHashes)
 requires acc(cache_v2.proofCache)
 requires acc(cache_v2.mapserverInfoCache)
-requires cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), inPerms)
+requires acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), inPerms)
 requires cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 requires cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 requires cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -577,6 +581,7 @@ requires forall k int :: {&verifyLegacyRequest.ConnectionCertificateChainb64[k]}
 requires len(verifyLegacyRequest.ConnectionCertificateChainb64) > 0
 requires let e2ld := publicsuffix.EffectiveTLDPlusOne(dnsName) in (e2ld in domain(cache_v2.policyDnsNameCache))
 // | INVARIANTS OVER CACHE | --- | ALWAYS HOLD IF JS DOES NOT TOUCH CACHES |
+ensures outPerms > 0 && outPerms <= 0
 ensures acc(&cache_v2.policyCache)
 ensures acc(&cache_v2.immutablePolicyCache)
 ensures acc(&cache_v2.policyDnsNameCache)
@@ -589,7 +594,7 @@ ensures acc(cache_v2.policyDnsNameCache)
 ensures acc(cache_v2.ignoredPolicyHashes)
 ensures acc(cache_v2.proofCache)
 ensures acc(cache_v2.mapserverInfoCache)
-ensures cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache), outPerms)
+ensures acc(cache_v2.PolicyCachePermissions(dict(cache_v2.policyCache), dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyDnsNameCache)), outPerms)
 ensures cache_v2.ImmutablePolicyCachePermissions(dict(cache_v2.immutablePolicyCache), dict(cache_v2.policyCache))
 ensures cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 ensures cache_v2.ProofCachePermissions(dict(cache_v2.proofCache), dict(cache_v2.mapserverInfoCache))
@@ -598,7 +603,6 @@ ensures acc(&cache_v2.MS)
 ensures acc(&cache_v2.MSS)
 ensures acc(&cache_v2.NCertificatesAdded)
 // | ADDITIONAL CONTRACT OF FUNCTION | --- | MUST BE GUARENTEED BY JS |
-ensures outPerms > 0
 ensures outPerms <= inPerms
 ensures forall k int :: {&oPolicyChain[k]} 0 <= k && k < len(oPolicyChain) ==> acc(&oPolicyChain[k])
 ensures forall k int :: {&oConflictingPolicies[k]} 0 <= k && k < len(oConflictingPolicies) ==> acc(&oConflictingPolicies[k])
@@ -635,7 +639,7 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 		}
 
 		// call the policy validation with the connection domain name and certificate chain
-		policyTrustInfo := cache_v2.NewPolicyTrustInfo(dnsName, certificateChain, dict(cache_v2.policyDnsNameCache), outPerms)
+		policyTrustInfo := cache_v2.NewPolicyTrustInfo(dnsName, certificateChain, dict(cache_v2.policyDnsNameCache))
 		_, tmp := cache_v2.VerifyPolicy(policyTrustInfo, outPerms)
 		ghost outPerms = tmp
 
@@ -648,19 +652,19 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 		// parse output to JS compatible types
 		ghost oldDnsCache := dict(cache_v2.policyDnsNameCache)
 
-		unfold cache_v2.acc_trustInfo(policyTrustInfo, dict(cache_v2.policyDnsNameCache), outPerms)
+		unfold acc(cache_v2.acc_trustInfo(policyTrustInfo, dict(cache_v2.policyDnsNameCache)), outPerms)
 		policyChain := make([]interface{}, len(policyTrustInfo.PolicyChain))
 		invariant acc(&cache_v2.policyDnsNameCache)
 		invariant acc(cache_v2.policyDnsNameCache)
 		invariant cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 		//invariant cache_v2.policyDnsNameCache === old(cache_v2.policyDnsNameCache)
 		invariant dict(cache_v2.policyDnsNameCache) === oldDnsCache
-		invariant acc(policyTrustInfo) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k])) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k, outPerms)) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k])) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k, outPerms)) &&
-	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) &&
+		invariant acc(policyTrustInfo, outPerms) &&
+	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k], outPerms)) &&
+	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k), outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k], outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k), outPerms)) &&
+	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) &&
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(policyTrustInfo.DNSName) in (e2ld in domain(cache_v2.policyDnsNameCache)) &&
 	len(policyTrustInfo.PolicyChain) >= 0
 		invariant forall k int :: {&policyChain[k]} 0 <= k && k < len(policyChain) ==> acc(&policyChain[k])
@@ -681,13 +685,13 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 		invariant cache_v2.PolicyDnsNameCachePermissions(dict(cache_v2.policyDnsNameCache), dict(cache_v2.policyCache))
 		//invariant cache_v2.policyDnsNameCache === old(cache_v2.policyDnsNameCache)
 		invariant dict(cache_v2.policyDnsNameCache) === oldDnsCache
-		invariant acc(policyTrustInfo) &&
-	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k]))
+		invariant acc(policyTrustInfo, outPerms) &&
+	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k], outPerms))
 	invariant 0 <= i && i <= len(policyTrustInfo.ConflictingPolicyAttributes)
-	invariant (forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} i <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k, outPerms)) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k])) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k, outPerms)) &&
-	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1]) &&
+	invariant (forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} i <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k), outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k], outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k), outPerms)) &&
+	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) &&
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(policyTrustInfo.DNSName) in (e2ld in domain(cache_v2.policyDnsNameCache)) &&
 	len(policyTrustInfo.PolicyChain) >= 0
 	invariant len(policyTrustInfo.ConflictingPolicyAttributes) == len(conflictingPolicies)
