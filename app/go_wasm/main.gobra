@@ -663,7 +663,7 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(&policyTrustInfo.ConflictingPolicyAttributes[k], outPerms)) &&
 	(forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k), outPerms)) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k], outPerms)) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k), outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_chainCertificate(policyTrustInfo.PolicyChain[k], len(policyTrustInfo.PolicyChain) - k - 1, dict(cache_v2.policyDnsNameCache)), outPerms)) &&
 	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) &&
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(policyTrustInfo.DNSName) in (e2ld in domain(cache_v2.policyDnsNameCache)) &&
 	len(policyTrustInfo.PolicyChain) >= 0
@@ -690,7 +690,7 @@ func verifyPolicyWrapper(dnsName string, verifyLegacyRequest VerifyRequest, ghos
 	invariant 0 <= i && i <= len(policyTrustInfo.ConflictingPolicyAttributes)
 	invariant (forall k int :: {&policyTrustInfo.ConflictingPolicyAttributes[k]} i <= k && k < len(policyTrustInfo.ConflictingPolicyAttributes) ==> acc(cache_v2.acc_inj_trustInfo_conflictingPolicyAttributes_attr(policyTrustInfo.ConflictingPolicyAttributes[k], k), outPerms)) &&
 	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(&policyTrustInfo.PolicyChain[k], outPerms)) &&
-	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_trustInfo_policy(policyTrustInfo.PolicyChain[k], k), outPerms)) &&
+	(forall k int :: {&policyTrustInfo.PolicyChain[k]} 0 <= k && k < len(policyTrustInfo.PolicyChain) ==> acc(cache_v2.acc_inj_chainCertificate(policyTrustInfo.PolicyChain[k], len(policyTrustInfo.PolicyChain) - k - 1, dict(cache_v2.policyDnsNameCache)), outPerms)) &&
 	len(policyTrustInfo.CertificateChain) > 0 && acc(&policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) && acc(policyTrustInfo.CertificateChain[len(policyTrustInfo.CertificateChain)-1], outPerms) &&
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(policyTrustInfo.DNSName) in (e2ld in domain(cache_v2.policyDnsNameCache)) &&
 	len(policyTrustInfo.PolicyChain) >= 0

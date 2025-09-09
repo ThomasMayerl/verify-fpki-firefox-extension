@@ -370,85 +370,6 @@ func AddPoliciesToCache(policies []*common.PolicyCertificate, ghost inPerms perm
 	return processedPolicyHashes, outPerms
 }
 
-/*
-// not implemented because we don't know how much permission we have exactly for policiesInRequest,
-// so we cannot iterate over policiesInRequest because the current version of Gobra tries to remove
-// _some_ amount of permissions to prove immutability.
-ghost
-decreases
-requires oldPerms > 0
-requires newPerms > 0
-requires newPerms <= oldPerms
-requires policiesInRequestPerm > 0
-requires acc(policiesInRequest, policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, oldPerms)
-requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-requires policy_IssuerHash(exceptFor.IssuerHash, newPerms)
-ensures acc(policiesInRequest, policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, newPerms)
-ensures exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-func refoldPolicyIssuerHashes(policiesInRequest map[string][]*common.PolicyCertificate, exceptFor *common.PolicyCertificate, oldPerms perm, newPerms perm, policiesInRequestPerm perm)
-
-ghost
-decreases
-requires oldPerms > 0
-requires newPerms > 0
-requires newPerms <= oldPerms
-requires policiesInRequestPerm > 0
-requires acc(policiesInRequest, policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs, oldPerms)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains, oldPerms)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains, oldPerms)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains, oldPerms)
-requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-requires acc_strs(exceptFor.PolicyAttributes.AllowedCAs, newPerms) 
-requires acc_strs(exceptFor.PolicyAttributes.AllowedSubdomains, newPerms) 
-requires acc_strs(exceptFor.PolicyAttributes.DisallowedSubdomains, newPerms)
-requires acc_strs(exceptFor.PolicyAttributes.ExcludedSubdomains, newPerms)
-ensures acc(policiesInRequest, policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedCAs, newPerms)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.AllowedSubdomains, newPerms)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.DisallowedSubdomains, newPerms)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc_strs(getPoliciesFromMap(policiesInRequest, str)[k].PolicyAttributes.ExcludedSubdomains, newPerms)
-ensures exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-func refoldPolicyAttrs(policiesInRequest map[string][]*common.PolicyCertificate, exceptFor *common.PolicyCertificate, oldPerms perm, newPerms perm, policiesInRequestPerm perm)
-
-
-
-ghost
-decreases
-requires oldPerms > 0
-requires newPerms > 0
-requires newPerms <= oldPerms
-requires policiesInRequestPerm > 0
-requires acc(policiesInRequest, policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs, newPerms / 2)
-requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] != exceptFor ==> cache_SPCTs(getPoliciesFromMap(policiesInRequest, str)[k].SPCTs, oldPerms)
-requires exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-requires cache_SPCTs(exceptFor.SPCTs, newPerms)
-ensures acc(policiesInRequest, policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs, newPerms / 2)
-ensures forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> cache_SPCTs(getPoliciesFromMap(policiesInRequest, str)[k].SPCTs, newPerms)
-ensures exists str string :: str in domain(policiesInRequest) && (exists k int :: 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) && getPoliciesFromMap(policiesInRequest, str)[k] == exceptFor)
-func refoldPolicySPCTs(policiesInRequest map[string][]*common.PolicyCertificate, exceptFor *common.PolicyCertificate, oldPerms perm, newPerms perm, policiesInRequestPerm perm)
-*/
-
 // process a certificate by potentially adding
 // it to the cache
 // recursively processes parent certificates
@@ -469,7 +390,6 @@ requires acc(ignoredPolicyHashes)
 requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache))
 requires acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms)
 requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
-// TODO add other fields when these are commented in again! - also in other methods
 requires forall str string :: {str in domain(policiesInRequest)} str in domain(policiesInRequest) ==> (forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k]} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k], policiesInRequestPerm) && getPoliciesFromMap(policiesInRequest, str)[k] in domain(policiesInRequestProcessed)) &&
 (forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].SPCTs, inPerms) && acc(cache_SPCTs(getPoliciesFromMap(policiesInRequest, str)[k].SPCTs), inPerms)) &&
 (forall k int :: {&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash} 0 <= k && k < len(getPoliciesFromMap(policiesInRequest, str)) ==> acc(&getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash, inPerms) && acc(policy_IssuerHash(getPoliciesFromMap(policiesInRequest, str)[k].IssuerHash), inPerms)) &&
@@ -616,11 +536,8 @@ func processPolicy(policy *common.PolicyCertificate,
 	// changed from return processedPolicyHashes, verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,
 	//	immutablePolicyHash, issuerHash)
 
-	addedToCache, tmp := verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,	immutablePolicyHash, issuerHash, outPerms / 2, parentPolicyHash) /* outPerms needs to be / 2 because otherwise we could not check that we still have access. this also means that we get less permissions back but this is fine we only have to read from existing policies
+	addedToCache, tmp := verifyPolicyAndAllocateCaches(policy, potParentPolicy, policyHash,	immutablePolicyHash, issuerHash, outPerms / 2, parentPolicyHash) /* outPerms needs to be / 2 because otherwise we could not check that we still have access. this also means that we get less permissions back but this is fine we only have to read from existing policies*/ 
 
-	/*refoldPolicyIssuerHashes(policiesInRequest, policy, outPerms, tmp, policiesInRequestPerm / 2)
-	refoldPolicySPCTs(policiesInRequest, policy, outPerms, tmp, policiesInRequestPerm / 2)
-	refoldPolicyAttrs(policiesInRequest, policy, outPerms, tmp, policiesInRequestPerm / 2)*/
 	ghost outPerms = tmp
 
 	return processedPolicyHashes, addedToCache, outPerms
@@ -652,7 +569,6 @@ requires acc(policyCache)
 requires acc(policyDnsNameCache)
 requires acc(ignoredPolicyHashes)
 requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache))
-//requires unfolding ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache)) in (immutableIssuerPolicyHash in domain(immutablePolicyCache))
 requires acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms)
 requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
 requires parentPolicyHash in domain(policyCache) && unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms) in policyCache[parentPolicyHash].policy == parentPolicy
@@ -765,14 +681,13 @@ decreases
 func refoldForNewPolicyCache(immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyDnsNameCache dict[string][]string, exceptFor string, oldPolicyCache dict[string]*PolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry)
 
 ghost decreases
-//requires outPerms <= inPerms
 requires outPerms > 0 && outPerms <= 1
-//requires inPerms > 0
 requires forall str string :: {str in domain(oldPolicyDnsNameCache)} str in domain(oldPolicyDnsNameCache) ==> str in domain(policyDnsNameCache)
 // acc(..., 1/2) so we know that we don't change any other invariants!
 requires forall str string :: {policyCache[str]} str in domain(policyCache) && str != excl ==> acc(policyCache[str], outPerms) && acc(cache_policyHashes_policy(policyCache[str].policy, str, oldPolicyDnsNameCache), outPerms)
 ensures forall str string :: {policyCache[str]} str in domain(policyCache) && str != excl ==> acc(policyCache[str], outPerms) && acc(cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache), outPerms)
-func refoldPoliciesExceptForInclDns(policyCache dict[string]*PolicyCacheEntry, excl string, oldPolicyDnsNameCache dict[string][]string, policyDnsNameCache dict[string][]string, /*inPerms perm,*/ outPerms perm)
+func refoldPoliciesExceptForInclDns(policyCache dict[string]*PolicyCacheEntry, excl string, oldPolicyDnsNameCache dict[string][]string, policyDnsNameCache dict[string][]string, outPerms perm)
+
 // allocate entries in the certificateCache, dnsNameCache, subjectSKICache
 // if necessary (for non-root certificates)
 requires inPerms > 0 && inPerms <= 1
@@ -797,7 +712,6 @@ requires acc(policyCache)
 requires acc(policyDnsNameCache)
 requires acc(ignoredPolicyHashes)
 requires ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache))
-//requires unfolding ImmutablePolicyCachePermissions(dict(immutablePolicyCache), dict(policyCache)) in (immutableIssuerPolicyHash in domain(immutablePolicyCache))
 requires acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), inPerms)
 requires PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache))
 requires immutablePolicyHash != base64.StdEncoding.EncodeToString(nil)
@@ -875,25 +789,6 @@ func allocatePolicyCacheEntries(policy *common.PolicyCertificate,
 	immutablePolicyCacheEntry.policyHashes = append(perm(1/2), immutablePolicyCacheEntry.policyHashes, policyHash)
 	
 	fold acc(PolicyCachePermissions_ImmutableHash(immutablePolicyHash, policyHash, dict(immutablePolicyCache)), outPerms)
-	/*unfold cache_SPCTs(policy.SPCTs, inPerms)
-	ghost refoldForAllSPCTs(policy.SPCTs, inPerms, outPerms)
-	fold cache_SPCTs(policy.SPCTs, outPerms)
-	fold cache_SPCTs(policy.SPCTs, outPerms) // second time for cache
-	unfold policy_IssuerHash(policy.IssuerHash, inPerms)
-	fold policy_IssuerHash(policy.IssuerHash, outPerms)
-	fold policy_IssuerHash(policy.IssuerHash, outPerms) // second time for cache
-	unfold acc_strs(policy.PolicyAttributes.AllowedCAs, inPerms)
-	fold acc_strs(policy.PolicyAttributes.AllowedCAs, outPerms)
-	fold acc_strs(policy.PolicyAttributes.AllowedCAs, outPerms) // second time for cache
-	unfold acc_strs(policy.PolicyAttributes.AllowedSubdomains, inPerms)
-	fold acc_strs(policy.PolicyAttributes.AllowedSubdomains, outPerms)
-	fold acc_strs(policy.PolicyAttributes.AllowedSubdomains, outPerms) // second time for cache
-	unfold acc_strs(policy.PolicyAttributes.DisallowedSubdomains, inPerms)
-	fold acc_strs(policy.PolicyAttributes.DisallowedSubdomains, outPerms)
-	fold acc_strs(policy.PolicyAttributes.DisallowedSubdomains, outPerms) // second time for cache
-	unfold acc_strs(policy.PolicyAttributes.ExcludedSubdomains, inPerms)
-	fold acc_strs(policy.PolicyAttributes.ExcludedSubdomains, outPerms)
-	fold acc_strs(policy.PolicyAttributes.ExcludedSubdomains, outPerms) // second time for cache*/
 	ghost refoldForNewImmutablePolicyCache(dict(policyCache), policyHash, oldImmutablePolicyCache, dict(immutablePolicyCache), outPerms)
 	fold ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCacheEntry.policyHashes, immutablePolicyHash, dict(policyCache))
 	ghost refoldForNewPolicyCache(dict(immutablePolicyCache), dict(policyDnsNameCache), immutablePolicyHash, oldPolicyCache, dict(policyCache))
@@ -939,7 +834,6 @@ func getImmutablePolicyHash(policy *common.PolicyCertificate, ghost policyPerms 
 		assert false
 		log.Fatalf("Failed to compute hash over immutable policy certificate fields: %s", err)
 	}
-	//assert base64.StdEncoding.EncodeToString(hash) == base64.StdEncoding.AbstractEncodeToString(crypto.toSeq(hash))
 	return base64.StdEncoding.EncodeToString(hash)
 }
 

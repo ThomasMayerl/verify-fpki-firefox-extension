@@ -11,7 +11,6 @@ import (
 )
 
 pred acc_leafHashes(hashes []string, str string, ghost policyCache dict[string]*PolicyCacheEntry) {
-	//forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], _)
 	forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k]) && hashes[k] in domain(policyCache)
 }
 
@@ -33,8 +32,12 @@ pred cache_policyHashes_policy(policy *common.PolicyCertificate, hash string, gh
 	policy.Domain() in domain(policyDnsNameCache) && cache_SPCTs(policy.SPCTs) && policy_IssuerHash(policy.IssuerHash) && acc_strs(policy.PolicyAttributes.AllowedCAs) && acc_strs(policy.PolicyAttributes.AllowedSubdomains) && acc_strs(policy.PolicyAttributes.DisallowedSubdomains) && acc_strs(policy.PolicyAttributes.ExcludedSubdomains)
 }
 
+pred ImmutablePolicyCachePermissions_policyHash(hash *string, ghost policyCache dict[string]*PolicyCacheEntry) {
+	acc(hash) && (*hash) in domain(policyCache)
+}
+
 pred ImmutablePolicyCachePermissions_policyHashes(hashes []string, immutableHash string, ghost policyCache dict[string]*PolicyCacheEntry) {
-    len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k]) && hashes[k] in domain(policyCache)
+    len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> ImmutablePolicyCachePermissions_policyHash(&hashes[k], policyCache)//acc(&hashes[k]) && hashes[k] in domain(policyCache)
 }
 
 pred ImmutablePolicyCachePermissions_issuer(ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry) {
@@ -82,17 +85,11 @@ pred acc_policyCertificateChain(chain *PolicyCertificateChain, ghost policyDnsNa
 	acc(chain) &&
 	len(chain.PolicyCertificates) >= 1 &&
 	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc(&chain.PolicyCertificates[l])) &&
-	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc_inj_chainCertificate(chain.PolicyCertificates[l], len(chain.PolicyCertificates) - l - 1, policyDnsNameCache/*, chain*/))// &&
-	//chain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache, chain)) && 
-	//chain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache, chain))
+	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc_inj_chainCertificate(chain.PolicyCertificates[l], len(chain.PolicyCertificates) - l - 1, policyDnsNameCache))
 } 
 
 pred acc_inj_policyCertificateChain(chain *PolicyCertificateChain, i int, ghost policyDnsNameCache dict[string][]string) {
 	acc_policyCertificateChain(chain, policyDnsNameCache)
-}
-
-pred acc_inj_trustInfo_policy(policy *common.PolicyCertificate, i int) {
-	acc(policy) && cache_SPCTs(policy.SPCTs) && policy_IssuerHash(policy.IssuerHash) && acc_strs(policy.PolicyAttributes.AllowedCAs) && acc_strs(policy.PolicyAttributes.AllowedSubdomains) && acc_strs(policy.PolicyAttributes.DisallowedSubdomains) && acc_strs(policy.PolicyAttributes.ExcludedSubdomains)
 }
 
 pred acc_policyAttributes(attr *common.PolicyAttributes) {
@@ -113,7 +110,7 @@ pred acc_trustInfo(trustInfo *PolicyTrustInfo, ghost policyDnsNameCache dict[str
 	(forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc(&trustInfo.ConflictingPolicyAttributes[k])) &&
 	(forall k int :: {&trustInfo.ConflictingPolicyAttributes[k]} 0 <= k && k < len(trustInfo.ConflictingPolicyAttributes) ==> acc_inj_trustInfo_conflictingPolicyAttributes_attr(trustInfo.ConflictingPolicyAttributes[k], k)) &&
 	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc(&trustInfo.PolicyChain[k])) &&
-	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_trustInfo_policy(trustInfo.PolicyChain[k], k)) &&
+	(forall k int :: {&trustInfo.PolicyChain[k]} 0 <= k && k < len(trustInfo.PolicyChain) ==> acc_inj_chainCertificate(trustInfo.PolicyChain[k], len(trustInfo.PolicyChain) - k - 1, policyDnsNameCache)) &&
 	len(trustInfo.CertificateChain) > 0 && acc(&trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) && acc(trustInfo.CertificateChain[len(trustInfo.CertificateChain)-1]) &&
 	let e2ld := publicsuffix.EffectiveTLDPlusOne(trustInfo.DNSName) in (e2ld in domain(policyDnsNameCache)) &&
 	len(trustInfo.PolicyChain) >= 0
@@ -168,57 +165,17 @@ pure func unfoldAndFindMaxSPCT(spcts []common.SignedPolicyCertificateTimestamp, 
 }
 
 ghost 
-requires acc_inj_trustInfo_policy(policyCertificate, l)
-decreases
-//opaque
-pure func toAbstractPolicy(policyCertificate *common.PolicyCertificate, l int) AbstractPolicy {
-	return unfolding acc_inj_trustInfo_policy(policyCertificate, l) in toAbstractPolicyFromBlank(policyCertificate)/*(
-		AbstractPolicy{
-		AllowedCAs: strsToSeq(policyCertificate.PolicyAttributes.AllowedCAs),
-		AllowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.AllowedSubdomains),
-		DisallowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.DisallowedSubdomains),
-		ExcludedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.ExcludedSubdomains),
-		Domain: policyCertificate.Domain(),
-		minMaxTimestamp: unfoldAndFindMaxSPCT(policyCertificate.SPCTs, policyCertificate.TimeStamp),
-		})*/
-}
-
-ghost
-requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc(&policyCertificates[l])
-requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc_inj_trustInfo_policy(policyCertificates[l], l)
-ensures len(policyCertificates) == len(res)
-ensures forall k int :: {res[k]} 0 <= k && k < len(policyCertificates) ==> res[k] == toAbstractPolicy(policyCertificates[k], k)
-decreases
-pure func toAbstractChain(policyCertificates []*common.PolicyCertificate) (res AbstractChain)
-
-ghost 
 requires cache_policyHashes_policy(policyCertificate, hash, policyDnsNameCache)
 decreases
 pure func toAbstractPolicyFromCache(policyCertificate *common.PolicyCertificate, hash string, policyDnsNameCache dict[string][]string) AbstractPolicy {
-	return unfolding cache_policyHashes_policy(policyCertificate, hash, policyDnsNameCache) in toAbstractPolicyFromBlank(policyCertificate) /*(
-		AbstractPolicy{
-		AllowedCAs: strsToSeq(policyCertificate.PolicyAttributes.AllowedCAs),
-		AllowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.AllowedSubdomains),
-		DisallowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.DisallowedSubdomains),
-		ExcludedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.ExcludedSubdomains),
-		Domain: policyCertificate.Domain(),
-		minMaxTimestamp: unfoldAndFindMaxSPCT(policyCertificate.SPCTs, policyCertificate.TimeStamp),
-		})*/
+	return unfolding cache_policyHashes_policy(policyCertificate, hash, policyDnsNameCache) in toAbstractPolicyFromBlank(policyCertificate)
 }
 
 ghost 
-requires acc_inj_chainCertificate(policyCertificate, l, policyDnsNameCache/*, chain*/)
+requires acc_inj_chainCertificate(policyCertificate, l, policyDnsNameCache)
 decreases
-pure func toAbstractPolicyFromChain(policyCertificate *common.PolicyCertificate, l int, policyDnsNameCache dict[string][]string, chain *PolicyCertificateChain) AbstractPolicy {
-	return unfolding acc_inj_chainCertificate(policyCertificate, l, policyDnsNameCache/*, chain*/) in toAbstractPolicyFromBlank(policyCertificate)/*(
-		AbstractPolicy{
-		AllowedCAs: strsToSeq(policyCertificate.PolicyAttributes.AllowedCAs),
-		AllowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.AllowedSubdomains),
-		DisallowedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.DisallowedSubdomains),
-		ExcludedSubdomains: strsToSeq(policyCertificate.PolicyAttributes.ExcludedSubdomains),
-		Domain: policyCertificate.Domain(),
-		minMaxTimestamp: unfoldAndFindMaxSPCT(policyCertificate.SPCTs, policyCertificate.TimeStamp),
-		})*/
+pure func toAbstractPolicyFromChain(policyCertificate *common.PolicyCertificate, l int, policyDnsNameCache dict[string][]string) AbstractPolicy {
+	return unfolding acc_inj_chainCertificate(policyCertificate, l, policyDnsNameCache) in toAbstractPolicyFromBlank(policyCertificate)
 }
 
 ghost 
@@ -243,11 +200,11 @@ pure func toAbstractPolicyFromBlank(policyCertificate *common.PolicyCertificate)
 
 ghost
 requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc(&policyCertificates[l])
-requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc_inj_chainCertificate(policyCertificates[l], len(policyCertificates) - l - 1, policyDnsNameCache/*, chain*/)
+requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc_inj_chainCertificate(policyCertificates[l], len(policyCertificates) - l - 1, policyDnsNameCache)
 ensures len(policyCertificates) == len(res)
-ensures forall k int :: {res[k]} 0 <= k && k < len(policyCertificates) ==> res[k] == toAbstractPolicyFromChain(policyCertificates[k], len(policyCertificates) - k - 1, policyDnsNameCache, chain)
+ensures forall k int :: {res[k]} 0 <= k && k < len(policyCertificates) ==> res[k] == toAbstractPolicyFromChain(policyCertificates[k], len(policyCertificates) - k - 1, policyDnsNameCache)
 decreases
-pure func toAbstractChainFromChain(policyCertificates []*common.PolicyCertificate, policyDnsNameCache dict[string][]string, chain *PolicyCertificateChain) (res AbstractChain)
+pure func toAbstractChainFromChain(policyCertificates []*common.PolicyCertificate, policyDnsNameCache dict[string][]string) (res AbstractChain)
 
 ghost
 requires acc_inj_policyCertificateChain(chain, k, policyDnsNameCache)
@@ -262,30 +219,8 @@ requires acc_policyCertificateChain(chain, policyDnsNameCache)
 decreases
 opaque
 pure func unfoldAndToAbstractChainFromChain2(chain *PolicyCertificateChain, policyDnsNameCache dict[string][]string) AbstractChain {
-	return unfolding acc_policyCertificateChain(chain, policyDnsNameCache) in toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache, chain)
+	return unfolding acc_policyCertificateChain(chain, policyDnsNameCache) in toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache)
 }
-
-/*
-ghost
-requires perms > 0
-requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc(&policyCertificates[l])
-requires forall l int :: {&policyCertificates[l]} 0 <= l && l < len(policyCertificates) ==> acc_inj_trustInfo_policy(policyCertificates[l], l, perms)
-ensures len(policyCertificates) == len(res)
-ensures forall k int :: {res[k].Domain} 0 <= k && k < len(policyCertificates) ==> res[k].Domain == unfolding acc_inj_trustInfo_policy(policyCertificates[k], k, perms) in policyCertificates[k].Domain()
-ensures (forall k int :: {res[k].AllowedCAs} 0 <= k && k < len(policyCertificates) ==> 
-	unfolding acc_inj_trustInfo_policy(policyCertificates[k], k, perms) in (
-		(unfolding acc_strs(policyCertificates[k].PolicyAttributes.AllowedCAs, perms) in toSeq(policyCertificates[k].PolicyAttributes.AllowedCAs) == res[k].AllowedCAs)))
-ensures (forall k int :: {res[k].AllowedSubdomains} 0 <= k && k < len(policyCertificates) ==> 
-	unfolding acc_inj_trustInfo_policy(policyCertificates[k], k, perms) in (
-		(unfolding acc_strs(policyCertificates[k].PolicyAttributes.AllowedSubdomains, perms) in toSeq(policyCertificates[k].PolicyAttributes.AllowedSubdomains) == res[k].AllowedSubdomains)))
-ensures (forall k int :: {res[k].DisallowedSubdomains} 0 <= k && k < len(policyCertificates) ==> 
-	unfolding acc_inj_trustInfo_policy(policyCertificates[k], k, perms) in (
-		(unfolding acc_strs(policyCertificates[k].PolicyAttributes.DisallowedSubdomains, perms) in toSeq(policyCertificates[k].PolicyAttributes.DisallowedSubdomains) == res[k].DisallowedSubdomains)))
-ensures (forall k int :: {res[k].ExcludedSubdomains} 0 <= k && k < len(policyCertificates) ==> 
-	unfolding acc_inj_trustInfo_policy(policyCertificates[k], k, perms) in (
-		(unfolding acc_strs(policyCertificates[k].PolicyAttributes.ExcludedSubdomains, perms) in toSeq(policyCertificates[k].PolicyAttributes.ExcludedSubdomains) == res[k].ExcludedSubdomains)))
-decreases
-pure func toAbstractChain(policyCertificates []*common.PolicyCertificate, perms perm) (res AbstractChain)*/
 
 ghost
 requires excl >= 1
@@ -334,7 +269,7 @@ ghost
 decreases
 opaque
 pure func validityOfCA(policy AbstractPolicy, info AbstractCertificateChainInfo) bool {
-	return len(policy.AllowedCAs) == 0 || (exists k int :: {policy.AllowedCAs[k]} 0 <= k && k < len(policy.AllowedCAs) && info.CA == policy.AllowedCAs[k]) //info.CA in policy.AllowedCAs
+	return len(policy.AllowedCAs) == 0 || (exists k int :: {policy.AllowedCAs[k]} 0 <= k && k < len(policy.AllowedCAs) && info.CA == policy.AllowedCAs[k])
 }
 
 ghost
@@ -343,27 +278,6 @@ decreases
 opaque
 pure func validAgainstAllPolicies(policies AbstractChain, info AbstractCertificateChainInfo, idx int) (res bool) {
 	return forall k int :: {policies[k]} 0 <= k && k < idx ==> validityOfCA(policies[k], info) && validityOfDomain(policies[k], info)
-}
-
-ghost 
-requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) && 
-    (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp)) &&
-	ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains))
-requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-//requires rootChain != nil ==> acc_policyCertificateChain(rootChain, policyDnsNameCache)
-ensures (immutableHash == base64.StdEncoding.EncodeToString(nil) || !(immutableHash in domain(immutablePolicyCache))) ==> res == seq[AbstractPolicy]{}
-ensures immutableHash != base64.StdEncoding.EncodeToString(nil) && (immutableHash in domain(immutablePolicyCache)) && len(rootChain) != 0 && immutableHash == rootChain[0].immutableHash ==> res == rootChain
-ensures immutableHash != base64.StdEncoding.EncodeToString(nil) && (immutableHash in domain(immutablePolicyCache)) && !(len(rootChain) != 0 && immutableHash == rootChain[0].immutableHash) ==> res == seq[AbstractPolicy]{unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestampInner(unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)
-decreases (immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)) ? unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].depth : 0
-opaque
-pure func abstractGetPolicyCertificateChainWithLatestTimestampInner(immutableHash string, rootChain AbstractChain, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string) (res AbstractChain) {
-	return (immutableHash == base64.StdEncoding.EncodeToString(nil) || !(immutableHash in domain(immutablePolicyCache))) ? seq[AbstractPolicy]{} : (
-		(len(rootChain) != 0 && immutableHash == rootChain[0].immutableHash) ? rootChain : (
-			seq[AbstractPolicy]{unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestampInner(unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)))
 }
 
 ghost
@@ -376,51 +290,13 @@ requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in 
 	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains))
 requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
 opaque
-decreases
+decreases (immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)) ? unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].depth : 0
 pure func abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChain AbstractChain, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string) (res AbstractChain){
-	return abstractGetPolicyCertificateChainWithLatestTimestampInner(immutableHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)
+	//return abstractGetPolicyCertificateChainWithLatestTimestampInner(immutableHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)
+	return (len(rootChain) != 0 && immutableHash == rootChain[0].immutableHash) ? rootChain : 
+		(immutableHash == base64.StdEncoding.EncodeToString(nil) || !(immutableHash in domain(immutablePolicyCache))) ? seq[AbstractPolicy]{} : (
+			seq[AbstractPolicy]{unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestamp(reveal getIssuer(immutableHash, immutablePolicyCache)/*unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash*/, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache))
 }
-
-/*
-ghost
-requires perms1 > 0
-requires perms2 > 0
-requires immutableHash != base64.StdEncoding.EncodeToString(nil) ==> immutableHash in domain(immutablePolicyCache)
-preserves (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) &&
-    (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp)) &&
-	(forall str string :: {&immutablePolicyCache[str].depth} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].depth) && immutablePolicyCache[str].depth > 0) &&
-	(forall str string :: {&immutablePolicyCache[str].immutableIssuerHash} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].immutableIssuerHash) && (immutablePolicyCache[str].immutableIssuerHash != base64.StdEncoding.EncodeToString(nil) ==> immutablePolicyCache[str].immutableIssuerHash in domain(immutablePolicyCache) && immutablePolicyCache[immutablePolicyCache[str].immutableIssuerHash].depth == immutablePolicyCache[str].depth - 1)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains)) &&
-	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains))
-preserves PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache, perms2)
-preserves rootChain != nil ==> acc_policyCertificateChain(rootChain, policyDnsNameCache, perms2)
-ensures abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache, perms1) == abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache, perms2)
-decreases 
-func lemmaChainGenerationIndependentFromPerm(immutableHash string, rootChain *PolicyCertificateChain, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms1 perm, perms2 perm)*/
-
-/*
-ghost
-requires forall k int :: {&spcts[k]} 0 <= k && k < len(spcts) ==> cache_SPCT(&spcts[k], k)
-requires idx >= 0
-requires excl <= len(spcts)
-ensures idx >= excl ==> res == maxTimestamp
-ensures idx < excl ==> res == findMaxSPCTInner(spcts, idx + 1, maxTime(unfolding cache_SPCT(&spcts[idx], idx) in spcts[idx].AddedTS, maxTimestamp), excl)
-decreases len(spcts) - idx
-opaque
-pure func findMaxSPCTInner(spcts []common.SignedPolicyCertificateTimestamp, idx int, maxTimestamp time.Time, excl int) (res time.Time) {
-	return idx >= excl ? maxTimestamp : findMaxSPCTInner(spcts, idx + 1, maxTime(unfolding cache_SPCT(&spcts[idx], idx) in spcts[idx].AddedTS, maxTimestamp), excl)
-}
-
-ghost 
-requires excl <= len(spcts)
-requires forall k int :: {&spcts[k]} 0 <= k && k < len(spcts) ==> cache_SPCT(&spcts[k], k)
-decreases 
-opaque
-pure func findMaxSPCT(spcts []common.SignedPolicyCertificateTimestamp, policyTime time.Time, excl int) (res time.Time) {
-	return len(spcts) == 0 ? policyTime : findMaxSPCTInner(spcts, 0, policyTime, excl)
-}*/
 
 ghost
 requires forall k int :: {&spcts[k]} 0 <= k && k < len(spcts) ==> cache_SPCT(&spcts[k], k)
@@ -445,83 +321,47 @@ pure func findMaxSPCT(spcts []common.SignedPolicyCertificateTimestamp, policyTim
 	return excl == 0 ? policyTime : findMaxSPCTInner(spcts, policyTime, excl, idx - 1) // idx just to prove termination
 }
 
-
-/*
-ghost
-requires forall k int :: {hashes[k]} 0 <= k && k < len(hashes) ==> hashes[k] in domain(policyCache)
-requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-ensures len(hashes) == 0 ==> res == minMaxPolicy
-ensures len(hashes) != 0 ==> res == (let maxSPCT := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in (unfolding cache_policyHashes_policy(policyCache[hashes[0]].policy, hashes[0], policyDnsNameCache) in (unfolding cache_SPCTs(policyCache[hashes[0]].policy.SPCTs) in (findMaxSPCT(policyCache[hashes[0]].policy.SPCTs, policyCache[hashes[0]].policy.TimeStamp, len(policyCache[hashes[0]].policy.SPCTs), len(policyCache[hashes[0]].policy.SPCTs))))) in (
-		(isFirst || minMaxTimestamp.After(maxSPCT)) ? getMinMaxPolicyInner(hashes[1:], false, maxSPCT, unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in toAbstractPolicyFromCache(policyCache[hashes[0]].policy, hashes[0], policyDnsNameCache), immutablePolicyCache, policyCache, policyDnsNameCache) : getMinMaxPolicyInner(hashes[1:], false, minMaxTimestamp, minMaxPolicy, immutablePolicyCache, policyCache, policyDnsNameCache)))
-decreases len(hashes)
-opaque
-pure func getMinMaxPolicyInner(hashes seq[string], isFirst bool, minMaxTimestamp time.Time, minMaxPolicy AbstractPolicy, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string) (res AbstractPolicy) {
-	return len(hashes) == 0 ? minMaxPolicy : (let maxSPCT := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in (unfolding cache_policyHashes_policy(policyCache[hashes[0]].policy, hashes[0], policyDnsNameCache) in (unfolding cache_SPCTs(policyCache[hashes[0]].policy.SPCTs) in (findMaxSPCT(policyCache[hashes[0]].policy.SPCTs, policyCache[hashes[0]].policy.TimeStamp, len(policyCache[hashes[0]].policy.SPCTs), len(policyCache[hashes[0]].policy.SPCTs))))) in (
-		(isFirst || minMaxTimestamp.After(maxSPCT)) ? getMinMaxPolicyInner(hashes[1:], false, maxSPCT, unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in toAbstractPolicyFromCache(policyCache[hashes[0]].policy, hashes[0], policyDnsNameCache), immutablePolicyCache, policyCache, policyDnsNameCache) : getMinMaxPolicyInner(hashes[1:], false, minMaxTimestamp, minMaxPolicy, immutablePolicyCache, policyCache, policyDnsNameCache)))
-}	
-
-ghost
-requires immutableHash in domain(immutablePolicyCache)
-requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache)
-decreases
-opaque
-pure func getMinMaxPolicy(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string) (res AbstractPolicy) {
-	return getMinMaxPolicyInner(unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache) in toSeq(immutablePolicyCache[immutableHash].policyHashes), true, time.Time{}, AbstractPolicy{}, immutablePolicyCache, policyCache, policyDnsNameCache)
-}*/
-
 ghost
 requires idx == excl - 1
 requires excl > 1
 requires immutableHash in domain(immutablePolicyCache)
-/*requires forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
-    acc(policyCache[str]) && 
-    cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache)*/
 requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes) && acc(immutablePolicyCache[immutableHash].policyHashes)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes)
+requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache)
 requires excl <= len(immutablePolicyCache[immutableHash].policyHashes)
-ensures res == let curr := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[excl - 1]].policy, immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyDnsNameCache) in 
+ensures res == let curr := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in unfolding ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[excl - 1]].policy, immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyDnsNameCache) in 
 	let inner := getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, excl - 1, idx) in
 	curr.minMaxTimestamp.Before(inner.minMaxTimestamp) ? curr : inner
 decreases idx, excl
 opaque
 pure func getMinMaxPolicyInner(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, excl int, idx int) (res AbstractPolicy) {
-	return let curr := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[excl - 1]].policy, immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyDnsNameCache) in 
+	return let curr := unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in unfolding ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[excl - 1]].policy, immutablePolicyCache[immutableHash].policyHashes[excl - 1], policyDnsNameCache) in 
 	let inner := getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, excl - 1, idx) in
 	curr.minMaxTimestamp.Before(inner.minMaxTimestamp) ? curr : inner
 }
 
-/*
 ghost
-requires idx == excl
-requires excl >= 1
+requires ImmutablePolicyCachePermissions_issuer(immutablePolicyCache)
 requires immutableHash in domain(immutablePolicyCache)
-requires forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
-    acc(policyCache[str]) && 
-    cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache)
-//requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes) && acc(immutablePolicyCache[immutableHash].policyHashes)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
-requires excl <= len(immutablePolicyCache[immutableHash].policyHashes)
-decreases idx, excl
-opaque
-pure func getMinMaxPolicy1(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, excl int, idx int) (res AbstractPolicy) {
-	return excl == 1 ? (toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) : getMinMaxPolicyInner(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, excl, idx - 1)
-}*/
+decreases
+opaque 
+pure func getIssuer(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry) string {
+	return unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash
+}
 
 ghost
 requires idx == excl
 requires excl >= 1
 requires immutableHash in domain(immutablePolicyCache)
 requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes) && acc(immutablePolicyCache[immutableHash].policyHashes)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes) 
+requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache)
+//requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
 requires excl <= len(immutablePolicyCache[immutableHash].policyHashes)
 decreases idx, excl
 opaque
 pure func getMinMaxPolicy(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, excl int, idx int) (res AbstractPolicy) {
-	return excl == 1 ? (unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) : getMinMaxPolicyInner(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, excl, idx - 1)
+	return excl == 1 ? (unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in unfolding ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], policyCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) : getMinMaxPolicyInner(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, excl, idx - 1)
 }
 
 ghost 
@@ -586,7 +426,7 @@ pure func validityOfDomain(policy AbstractPolicy, info AbstractCertificateChainI
 			let subdomains := strings.GhostSplit(subdomain, ".") in (
 				let target := subdomains[len(subdomains) - 1] in (
 					(target in policy.AllowedSubdomains) || (
-						!(target in policy.DisallowedSubdomains) && (target in policy.ExcludedSubdomains /* TODO IS THIS REALLY WHAT EXCLUDED IS FOR? */ || !("*" in policy.DisallowedSubdomains))))))))
+						!(target in policy.DisallowedSubdomains) && (target in policy.ExcludedSubdomains || !("*" in policy.DisallowedSubdomains))))))))
 }
 
 // if implemented: fallback of chain generatoion is empty chain.
@@ -649,13 +489,10 @@ ensures len(parentDomain) < len(subdomain)
 pure func abstractParentDomain(subdomain string) (parentDomain string)
 
 ghost
-//requires acc_policyCertificateChain(rootChain, policyDnsNameCache)
 requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
 requires ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache)
 requires PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache)
-//requires len(subdomain) >= e2ldLen
 requires exclJ >= 0
-//requires subdomain in domain(policyDnsNameCache) ==> (exclJ > 0 || len(subdomain) > e2ldLen)
 requires subdomain in domain(policyDnsNameCache) ==> exclJ <= abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)
 requires exclJ > 0 ==> subdomain in domain(policyDnsNameCache)
 decreases len(subdomain), exclJ
@@ -666,6 +503,8 @@ pure func abstractGetNewestChainWithRootChain(subdomain string, e2ldLen int, imm
 				let rec := abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ - 1) in (
 					let currChain := (unfolding ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ - 1, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)) in (len(rec) == 0 || abstractGetDomainLatestMinMaxTimestamp(currChain).After(abstractGetDomainLatestMinMaxTimestamp(rec)) ? currChain : rec))))
 }
+
+
 
 ghost
 requires idx >= 0
@@ -695,12 +534,6 @@ func lemmaValidAgainstCA(policy AbstractPolicy, info AbstractCertificateChainInf
 	reveal validityOfCA(policy, info)
 }
 
-/*ghost
-requires len(abstractChain) == 0
-ensures validAgainstAllPolicies(abstractChain, info, 0)
-decreases
-func lemmaEmptyConflictingPolicyAttributes(abstractChain AbstractChain, info common.AbstractCertificateChainInfo)
-*/
 ghost
 ensures validAgainstAllPolicies(abstractChain, info, 0)
 decreases
@@ -710,14 +543,14 @@ func lemmaCheckNoPolicy(abstractChain AbstractChain, info AbstractCertificateCha
 
 ghost 
 requires perms > 0
-requires acc(acc_inj_trustInfo_policy(policy, l), perms)
-requires toAbstractPolicy(policy, l) == abstractPolicy
-requires unfolding acc(acc_inj_trustInfo_policy(policy, l), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainAllowed)
-ensures acc(acc_inj_trustInfo_policy(policy, l), perms)
+requires acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
+requires toAbstractPolicyFromChain(policy, l, policyDnsNameCache) == abstractPolicy
+requires unfolding acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainAllowed)
+ensures acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 ensures validityOfDomain(abstractPolicy, info)
 decreases
-func lemmaDomainAllowedValid(policy *common.PolicyCertificate, l int, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
-	unfold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+func lemmaDomainAllowedValid(policy *common.PolicyCertificate, l int, policyDnsNameCache dict[string][]string, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
+	unfold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	unfold acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms / 2)
@@ -728,20 +561,20 @@ func lemmaDomainAllowedValid(policy *common.PolicyCertificate, l int, abstractPo
 	reveal strsToSeq(policy.PolicyAttributes.AllowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.DisallowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.ExcludedSubdomains)
-	fold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+	fold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	reveal validityOfDomain(abstractPolicy, info)
 }
 
 ghost 
 requires perms > 0
-requires acc(acc_inj_trustInfo_policy(policy, l), perms)
-requires toAbstractPolicy(policy, l) == abstractPolicy
-requires unfolding acc(acc_inj_trustInfo_policy(policy, l), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainExcluded)
-ensures acc(acc_inj_trustInfo_policy(policy, l), perms)
+requires acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
+requires toAbstractPolicyFromChain(policy, l, policyDnsNameCache) == abstractPolicy
+requires unfolding acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainExcluded)
+ensures acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 ensures validityOfDomain(abstractPolicy, info)
 decreases
-func lemmaDomainExcludedValid(policy *common.PolicyCertificate, l int, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
-	unfold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+func lemmaDomainExcludedValid(policy *common.PolicyCertificate, l int, policyDnsNameCache dict[string][]string, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
+	unfold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	unfold acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms / 2)
@@ -752,20 +585,20 @@ func lemmaDomainExcludedValid(policy *common.PolicyCertificate, l int, abstractP
 	reveal strsToSeq(policy.PolicyAttributes.AllowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.DisallowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.ExcludedSubdomains)
-	fold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+	fold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	reveal validityOfDomain(abstractPolicy, info)
 }
 
 ghost 
 requires perms > 0
-requires acc(acc_inj_trustInfo_policy(policy, l), perms)
-requires toAbstractPolicy(policy, l) == abstractPolicy
-requires unfolding acc(acc_inj_trustInfo_policy(policy, l), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainDisallowed)
-ensures acc(acc_inj_trustInfo_policy(policy, l), perms)
+requires acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
+requires toAbstractPolicyFromChain(policy, l, policyDnsNameCache) == abstractPolicy
+requires unfolding acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms) in unfolding acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms) in (common.DomainValiditySpec(policy.PolicyAttributes, normalizeDomainSpec(policy.Domain()), info.DNSName) == common.PolicyAttributeDomainDisallowed)
+ensures acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 ensures !validityOfDomain(abstractPolicy, info)
 decreases
-func lemmaDomainDisallowedInvalid(policy *common.PolicyCertificate, l int, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
-	unfold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+func lemmaDomainDisallowedInvalid(policy *common.PolicyCertificate, l int, policyDnsNameCache dict[string][]string, abstractPolicy AbstractPolicy, info AbstractCertificateChainInfo, perms perm) {
+	unfold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	unfold acc(acc_strs(policy.PolicyAttributes.AllowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.DisallowedSubdomains), perms / 2)
 	unfold acc(acc_strs(policy.PolicyAttributes.ExcludedSubdomains), perms / 2)
@@ -776,7 +609,7 @@ func lemmaDomainDisallowedInvalid(policy *common.PolicyCertificate, l int, abstr
 	reveal strsToSeq(policy.PolicyAttributes.AllowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.DisallowedSubdomains)
 	reveal strsToSeq(policy.PolicyAttributes.ExcludedSubdomains)
-	fold acc(acc_inj_trustInfo_policy(policy, l), perms / 2)
+	fold acc(acc_inj_chainCertificate(policy, l, policyDnsNameCache), perms)
 	reveal validityOfDomain(abstractPolicy, info)
 }
 
@@ -821,35 +654,6 @@ func lemmaFindAbstractChainsInduction(chains seq[AbstractChain], domainVar strin
 	reveal abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1)
 }
 
-/*
-ghost
-requires idx >= 0
-requires perms > 0
-requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/4)
-requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires domainVar in domain(policyDnsNameCache)
-requires idx < let c, _ := policyDnsNameCache[domainVar] in len(c)
-requires idx == len(chains) - 1
-requires forall k int :: {&chains[k]} 0 <= k && k < len(chains) ==> acc(&chains[k], perms) && acc(acc_inj_policyCertificateChain(chains[k], k, policyDnsNameCache), perms)
-requires toAbstractChains(chains, policyDnsNameCache)[:idx] == abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx)
-//requires toAbstractChains(chains[:idx], policyDnsNameCache) == abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx)
-requires unfolding acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/4) in unfolding acc(acc_leafHashes(policyDnsNameCache[domainVar], domainVar, policyCache), 1/4) in (let hashes, _ := policyDnsNameCache[domainVar] in len(hashes) > idx)
-requires unfolding acc(acc_inj_policyCertificateChain(chains[idx], idx, policyDnsNameCache), perms) in unfolding acc(acc_policyCertificateChain(chains[idx], policyDnsNameCache), perms) in toAbstractChainFromChain(chains[idx].PolicyCertificates, policyDnsNameCache, chains[idx]) == unfoldAndGetChain(unfolding acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/4) in unfolding acc(acc_leafHashes(policyDnsNameCache[domainVar], domainVar, policyCache), 1/4) in (let hashes, _ := policyDnsNameCache[domainVar] in hashes[idx]), immutablePolicyCache, policyCache, policyDnsNameCache)
-ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/4)
-ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-ensures domainVar in domain(policyDnsNameCache)
-ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures idx < let c, _ := policyDnsNameCache[domainVar] in len(c)
-ensures forall k int :: {&chains[k]} 0 <= k && k < len(chains) ==> acc(&chains[k], perms) && acc(acc_inj_policyCertificateChain(chains[k], k, policyDnsNameCache), perms)
-ensures toAbstractChains(chains, policyDnsNameCache) == abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1)
-decreases 
-func lemmaFindAbstractChainsInduction(chains []*PolicyCertificateChain, domainVar string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, idx int, perms perm) {
-	reveal abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx)
-	reveal unfoldAndGetChain(unfolding acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/4) in unfolding acc(acc_leafHashes(policyDnsNameCache[domainVar], domainVar, policyCache), 1/4) in (let hashes, _ := policyDnsNameCache[domainVar] in hashes[idx]), immutablePolicyCache, policyCache, policyDnsNameCache)
-	reveal abstractFindChains(domainVar, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1)
-}*/
-
 ghost 
 requires perms > 0
 requires forall k int :: {&spcts[k]} 0 <= k && k < len(spcts) ==> acc(cache_SPCT(&spcts[k], k), perms)
@@ -881,32 +685,17 @@ func lemmaFindMaxSPCTInduction(spcts []common.SignedPolicyCertificateTimestamp, 
 	reveal findMaxSPCT(spcts, policyTime, idx + 1, idx + 1)
 }
 
-/*ghost
-requires perms > 0
-requires forall k int :: {&chains[k]} 0 <= k && k < len(chains) ==> acc(&chains[k], perms) && acc(acc_inj_policyCertificateChain(chains[k], k, policyDnsNameCache), perms)
-ensures forall k int :: {&chains[k]} 0 <= k && k < len(chains) ==> acc(&chains[k], perms) && acc(acc_inj_policyCertificateChain(chains[k], k, policyDnsNameCache), perms)
-ensures forall idx int :: {&chains[idx]} 0 < idx && idx <= len(chains) ==> toAbstractChains(chains[:idx], policyDnsNameCache) == toAbstractChains(chains, policyDnsNameCache)[:idx]
-decreases
-func lemmaHomomorphismOfAbstractChains(chains []*PolicyCertificateChain, policyDnsNameCache dict[string][]string, perms perm) {
-
-}*/
-
-ghost 
-requires perms > 0
-requires cachePerms > 0 
+ghost
 requires immutableHash in domain(immutablePolicyCache)
-requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes)
 requires len(immutablePolicyCache[immutableHash].policyHashes) > 0
-ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
-ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
-ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
+requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache)
+requires 0 <= idx && idx < len(immutablePolicyCache[immutableHash].policyHashes)
+requires ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache)
 decreases
-func lemmaGetMinMaxPolicyEmpty(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm, cachePerms perm) {
-	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
+opaque
+pure func unfoldAndToAbstractPolicyFromCache(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, idx int) AbstractPolicy {
+	return (unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in unfolding ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache))
 }
 
 ghost 
@@ -914,20 +703,41 @@ requires perms > 0
 requires cachePerms > 0 
 requires immutableHash in domain(immutablePolicyCache)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
+requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
+requires len(immutablePolicyCache[immutableHash].policyHashes) > 0
+ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
+ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
+ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
+ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
+//ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
+ensures unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 0) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
+decreases
+func lemmaGetMinMaxPolicyEmpty(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm, cachePerms perm) {
+	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
+	reveal unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 0)
+}
+
+ghost 
+requires perms > 0
+requires cachePerms > 0 
+requires immutableHash in domain(immutablePolicyCache)
+requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
+requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 requires idx >= 1
 requires idx < len(immutablePolicyCache[immutableHash].policyHashes)
 requires currentPolicy == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx, idx)
-requires let curr := unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache) in
+requires let curr := unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) in
 	curr.minMaxTimestamp.Before(currentPolicy.minMaxTimestamp)
 requires len(immutablePolicyCache[immutableHash].policyHashes) > 0
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
+ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 ensures idx < len(immutablePolicyCache[immutableHash].policyHashes)
 ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
-ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
+//ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
+ensures unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 decreases
 func lemmaGetMinMaxPolicyInduction1(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, currentPolicy AbstractPolicy, idx int, perms perm, cachePerms perm) {
 	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
@@ -938,17 +748,17 @@ requires perms > 0
 requires cachePerms > 0 
 requires immutableHash in domain(immutablePolicyCache)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+requires acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) 
+requires forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 requires idx >= 1
 requires idx < len(immutablePolicyCache[immutableHash].policyHashes)
 requires currentPolicy == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx, idx)
-requires let curr := unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache) in
+requires let curr := unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) in
 	!curr.minMaxTimestamp.Before(currentPolicy.minMaxTimestamp)
 requires len(immutablePolicyCache[immutableHash].policyHashes) > 0
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms) && acc(immutablePolicyCache[immutableHash].policyHashes, cachePerms)
-ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> immutablePolicyCache[immutableHash].policyHashes[k] in domain(policyCache)
+ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
+ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 ensures idx < len(immutablePolicyCache[immutableHash].policyHashes)
 ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
 ensures currentPolicy == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
@@ -990,11 +800,9 @@ func lemmaGetNewestChainInduction2(chains seq[AbstractChain], excl int, curr Abs
 ghost 
 requires perms > 0
 requires len(subdomain) == e2ldLen
-//requires acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/8)
-//ensures acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/8)
@@ -1008,7 +816,6 @@ ghost
 requires perms > 0
 requires e2ldLen <= len(subdomain)
 requires exclJ >= 0
-//requires acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1016,7 +823,6 @@ requires subdomain in domain(policyDnsNameCache)
 requires exclJ < abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)
 requires abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ) == maxChain
 requires len(maxChain) == 0 || abstractGetDomainLatestMinMaxTimestamp(unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)).After(abstractGetDomainLatestMinMaxTimestamp(maxChain))
-//ensures acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1029,14 +835,12 @@ func abstractGetNewestChainWithRootChainInduction1SameSubdomain(subdomain string
 ghost 
 requires perms > 0
 requires len(subdomain) >= e2ldLen
-//requires acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
 requires abstractParentDomain(nextSubdomain) == subdomain
 requires abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)) == maxChain
 requires len(nextSubdomain) > len(subdomain)
-//ensures acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1050,7 +854,6 @@ ghost
 requires perms > 0
 requires e2ldLen <= len(subdomain)
 requires exclJ >= 0
-//requires acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1058,7 +861,6 @@ requires subdomain in domain(policyDnsNameCache)
 requires exclJ < abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)
 requires abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ) == maxChain
 requires len(maxChain) != 0 && !abstractGetDomainLatestMinMaxTimestamp(unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)).After(abstractGetDomainLatestMinMaxTimestamp(maxChain))
-//ensures acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1071,14 +873,12 @@ func abstractGetNewestChainWithRootChainInduction2SameSubdomain(subdomain string
 ghost 
 requires perms > 0
 requires len(subdomain) >= e2ldLen
-//requires acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
 requires !(nextSubdomain in domain(policyDnsNameCache))
 requires abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)) == maxChain
 requires abstractParentDomain(nextSubdomain) == subdomain
-//ensures acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
 ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
 ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
@@ -1104,4 +904,123 @@ ensures abstractGetSubdomainString(e2ld, subdomains, idx + 1) == subdomains[len(
 decreases
 func lemmaGetSubdomainStringInductionStep(e2ld string, subdomains seq[string], idx int, currentStr string) {
 	reveal abstractGetSubdomainString(e2ld, subdomains, idx + 1)
+}
+
+ghost
+requires !strings.GhostContains(subdomain, ".")
+ensures abstractParentDomain(subdomain + "." + parentDomain) == parentDomain
+decreases
+func lemmaParentDomain(subdomain string, parentDomain string)
+
+ghost
+requires perms > 0
+requires acc(resChain, perms) &&
+	len(resChain.PolicyCertificates) >= 1 &&
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], perms)) &&
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
+requires acc(parentChain, perms) &&
+	len(parentChain.PolicyCertificates) >= 1 &&
+	(forall l int :: {&parentChain.PolicyCertificates[l]} 0 <= l && l < len(parentChain.PolicyCertificates) ==> acc(&parentChain.PolicyCertificates[l], perms)) &&
+	(forall l int :: {&parentChain.PolicyCertificates[l]} 0 <= l && l < len(parentChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(parentChain.PolicyCertificates[l], len(parentChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
+requires len(resChain.PolicyCertificates) == len(parentChain.PolicyCertificates) + 1
+requires forall k int :: {&resChain.PolicyCertificates[k]} 1 <= k && k < len(resChain.PolicyCertificates) ==> resChain.PolicyCertificates[k] == parentChain.PolicyCertificates[k - 1]
+requires toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, policyDnsNameCache) == policy
+requires toAbstractChainFromChain(parentChain.PolicyCertificates, policyDnsNameCache) == parentChainAbs
+ensures acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+ensures acc(acc_policyCertificateChain(parentChain, policyDnsNameCache), perms)
+ensures unfoldAndToAbstractChainFromChain2(resChain, (policyDnsNameCache))[1:] == unfoldAndToAbstractChainFromChain2(parentChain, policyDnsNameCache)
+ensures unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{policy} ++ parentChainAbs
+decreases
+func lemmaAddToChainAndFold(resChain *PolicyCertificateChain, parentChain *PolicyCertificateChain, policy AbstractPolicy, parentChainAbs AbstractChain, policyDnsNameCache dict[string][]string, perms perm) {
+	fold acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+	fold acc(acc_policyCertificateChain(parentChain, policyDnsNameCache), perms)
+	reveal unfoldAndToAbstractChainFromChain2(parentChain, (policyDnsNameCache))
+	reveal unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache)
+}
+
+ghost
+requires perms > 0
+requires acc(resChain, perms) &&
+	len(resChain.PolicyCertificates) >= 1 &&
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], perms)) &&
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
+requires len(resChain.PolicyCertificates) == 1
+requires toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, policyDnsNameCache) == policy
+ensures acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+ensures unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{policy}
+decreases
+func lemmaAddToChainAndFold2(resChain *PolicyCertificateChain, policy AbstractPolicy, policyDnsNameCache dict[string][]string, perms perm) {
+	fold acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+	reveal unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache)
+}
+
+ghost
+requires perms > 0
+requires cachePerms > 0
+requires acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+requires rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
+requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
+    (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
+	acc(ImmutablePolicyCachePermissions_issuer(immutablePolicyCache), cachePerms) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains, cachePerms))
+requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
+requires immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)
+requires let rc := rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{} in !(len(rc) != 0 && immutableHash == rc[0].immutableHash) 
+requires rootChain != nil || !isIssuerNil(immutableHash, immutablePolicyCache) ==> unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache), cachePerms) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestamp(getIssuer(immutableHash, immutablePolicyCache), rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{}, immutablePolicyCache, policyCache, policyDnsNameCache)
+requires rootChain == nil && isIssuerNil(immutableHash, immutablePolicyCache) ==> unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache), cachePerms) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))}
+ensures acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
+ensures rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
+ensures (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
+    (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
+	acc(ImmutablePolicyCachePermissions_issuer(immutablePolicyCache), cachePerms) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains, cachePerms)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains, cachePerms))
+ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
+ensures immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)
+ensures let rc := rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{} in !(len(rc) != 0 && immutableHash == rc[0].immutableHash) 
+ensures unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash, rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{}, immutablePolicyCache, policyCache, policyDnsNameCache)
+decreases
+func lemmaChainGenerationSpec(resChain *PolicyCertificateChain, rootChain *PolicyCertificateChain, immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm, cachePerms perm) {
+	reveal abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash, rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{}, immutablePolicyCache, policyCache, policyDnsNameCache)
+	reveal unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache)
+	reveal unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache)
+	reveal isIssuerNil(immutableHash, immutablePolicyCache)
+}
+
+ghost
+requires ImmutablePolicyCachePermissions_issuer(immutablePolicyCache)
+requires immutableHash in domain(immutablePolicyCache)
+decreases
+opaque
+pure func isIssuerNil(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry) bool {
+	return unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash == base64.StdEncoding.EncodeToString(nil)
+}
+
+ghost
+requires perms > 0
+requires acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
+requires unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in len(chain.PolicyCertificates) != 0
+requires unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in base64.StdEncoding.AbstractEncodeToString(crypto.abstractComputeHashAsSigner(chain.PolicyCertificates[0])) == immHash
+ensures acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
+ensures len(unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)) != 0
+ensures unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)[0].immutableHash == immHash
+decreases
+func lemmaAbstractChainZero(chain *PolicyCertificateChain, policyDnsNameCache dict[string][]string, immHash string, perms perm) {
+	reveal unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
+}
+
+ghost
+requires perms > 0
+requires acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
+ensures acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
+ensures unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in len(chain.PolicyCertificates) == 0 ==> len(unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)) == 0
+ensures (unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in (len(chain.PolicyCertificates) > 0 && base64.StdEncoding.AbstractEncodeToString(crypto.abstractComputeHashAsSigner(chain.PolicyCertificates[0])) != immHash)) ==> (len(unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)) > 0 && unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)[0].immutableHash != immHash)
+decreases
+func lemmaAbstractChainZero2(chain *PolicyCertificateChain, policyDnsNameCache dict[string][]string, immHash string, perms perm) {
+	reveal unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
 }

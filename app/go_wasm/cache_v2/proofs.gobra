@@ -176,7 +176,6 @@ func GetProofCacheKey(proofKey []byte, leafHash []byte, mapserverID string) (res
 // add a new cache entry for this map server response if it does not exist yet and return the key used in the cache
 requires forall k int :: {&certIDs[k]} 0 <= k && k < len(certIDs) ==> acc(&certIDs[k]) && acc(certIDs[k])
 requires forall k int :: {&policyIDs[k]} 0 <= k && k < len(policyIDs) ==> acc(&policyIDs[k]) && acc(policyIDs[k])
-//requires forall k int :: {&certIDs[k]} 0 <= k && k < len(certIDs) ==> (forall l int :: {&policyIDs[l]} 0 <= l && l < len(policyIDs) ==> certIDs[k] != policyIDs[l])
 requires acc(response.DomainEntry)
 requires acc_bytes(response.PoI.ProofKey)
 requires acc_bytes(response.PoI.ProofValue)
@@ -199,7 +198,6 @@ ensures forall str string :: {mapserverInfoCache[str]} str in mapserverInfoCache
 ensures err == nil ==> res in domain(proofCache)
 ensures err != nil ==> err.ErrorMem()
 func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse, certIDs, policyIDs [](*[common.SHA256Size]byte), mapserverID string) (res string, err error) { // add names to return parameters
-//func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse, certIDs, policyIDs []*common.SHA256Output, mapserverID string) (res string, err error) /*{ // add names to return parameters
 	// merge and sort cert and policy IDs
 	ids@ := append(perm(1/2), certIDs[:0:0], certIDs...)
 	ids = append(perm(1/2), ids, policyIDs...)
@@ -231,7 +229,7 @@ func AddMapServerResponseToCacheIfNecessary(response mapCommon.MapServerResponse
 	if _, ok := proofCache[proofCacheKey]; !ok {
 		unfold ProofCachePermissions(dict(proofCache), dict(mapserverInfoCache))
 		//proofCache[proofCacheKey] = newProofCacheEntry(&response.PoI, proofKey, mapserverID, response.TreeHeadSig, ids, leafHash, proofCacheKey)
-		resp@ := response // TODO IS THIS CORRECT? to make referencable
+		resp@ := response
 		fold acc_PoI(&resp.PoI)
 		fold acc_SortedCertificateHashes(ids)
 		proofCache[proofCacheKey] = newProofCacheEntry(&resp.PoI, proofKey, mapserverID, response.TreeHeadSig, ids, leafHash, proofCacheKey)
@@ -255,7 +253,7 @@ ensures acc(mapserverInfoCache, 1/4)
 ensures forall str string :: {mapserverInfoCache[str]} str in mapserverInfoCache ==> acc(mapserverInfoCache[str], 1/2) && acc(mapserverInfoCache[str].publicKey, 1/2)
 ensures ProofCachePermissions_entry(res, key, dict(mapserverInfoCache))
 func newProofCacheEntry(poi *mapCommon.PoI, proofKey []byte, mapserverID string, treeHeadSignature []byte,
-	sortedCertificateHashes []*([common.SHA256Size]byte)/*[]*common.SHA256Output*/, leafHash []byte, ghost key string) (res *ProofCacheEntry) { // name return param
+	sortedCertificateHashes []*([common.SHA256Size]byte), leafHash []byte, ghost key string) (res *ProofCacheEntry) { // name return param
 	proofCacheEntry@ := ProofCacheEntry{
 		poi:                     poi,
 		treeHeadSignature:       treeHeadSignature,

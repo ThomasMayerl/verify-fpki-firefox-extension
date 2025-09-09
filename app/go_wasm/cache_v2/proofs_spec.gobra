@@ -15,7 +15,7 @@ pred acc_bytes(arr []byte) {
     forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k])
 }
 
-pred acc_SortedCertificateHashes(arr []*([common.SHA256Size]byte)/*[]*common.SHA256Output*/) {
+pred acc_SortedCertificateHashes(arr []*([common.SHA256Size]byte)) {
     forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k]) && acc(arr[k]) 
 }
 
