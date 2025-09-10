@@ -698,6 +698,7 @@ pure func unfoldAndToAbstractPolicyFromCache(immutableHash string, immutablePoli
 	return (unfolding PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache) in unfolding ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache))
 }
 
+
 ghost 
 requires perms > 0
 requires cachePerms > 0 
@@ -710,12 +711,12 @@ ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsN
 ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
 ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
-//ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
 ensures unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 0) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
 decreases
 func lemmaGetMinMaxPolicyEmpty(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, perms perm, cachePerms perm) {
-	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
 	reveal unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 0)
+	assert unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 0) == (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy,  immutablePolicyCache[immutableHash].policyHashes[0], policyDnsNameCache))
+	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, 1, 1)
 }
 
 ghost 
@@ -736,10 +737,11 @@ ensures acc(&immutablePolicyCache[immutableHash].policyHashes, cachePerms)
 ensures forall k int :: {&immutablePolicyCache[immutableHash].policyHashes[k]} 0 <= k && k < len(immutablePolicyCache[immutableHash].policyHashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[k], policyCache), cachePerms)
 ensures idx < len(immutablePolicyCache[immutableHash].policyHashes)
 ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
-//ensures (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy, immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache)) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 ensures unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 decreases
 func lemmaGetMinMaxPolicyInduction1(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, currentPolicy AbstractPolicy, idx int, perms perm, cachePerms perm) {
+	reveal unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx)
+	assert unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) == (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy,  immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache))
 	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 }
 
@@ -764,6 +766,8 @@ ensures len(immutablePolicyCache[immutableHash].policyHashes) > 0
 ensures currentPolicy == getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 decreases
 func lemmaGetMinMaxPolicyInduction2(immutableHash string, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, currentPolicy AbstractPolicy, idx int, perms perm, cachePerms perm) {
+	reveal unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx)
+	assert unfoldAndToAbstractPolicyFromCache(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx) == (unfolding acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms) in unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[idx], policyCache), cachePerms) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[idx]].policy,  immutablePolicyCache[immutableHash].policyHashes[idx], policyDnsNameCache))
 	reveal getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, idx + 1, idx + 1)
 }
 
