@@ -42,6 +42,7 @@ pred ImmutablePolicyCachePermissions_issuer(ghost immutablePolicyCache dict[stri
 }
 
 pred ImmutablePolicyCachePermissions(ghost immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, ghost policyCache dict[string]*PolicyCacheEntry) { 
+	(forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
     (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) && 
     (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp)) &&
 	ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) &&
@@ -277,7 +278,8 @@ pure func validAgainstAllPolicies(policies AbstractChain, info AbstractCertifica
 }
 
 ghost
-requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) &&
+requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes) && ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache)) &&
     (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp)) &&
 	ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) &&
 	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs)) &&
@@ -288,7 +290,6 @@ requires PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsName
 opaque
 decreases (immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)) ? unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].depth : 0
 pure func abstractGetPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChain AbstractChain, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string) (res AbstractChain){
-	//return abstractGetPolicyCertificateChainWithLatestTimestampInner(immutableHash, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)
 	return (len(rootChain) != 0 && immutableHash == rootChain[0].immutableHash) ? rootChain : 
 		(immutableHash == base64.StdEncoding.EncodeToString(nil) || !(immutableHash in domain(immutablePolicyCache))) ? seq[AbstractPolicy]{} : (
 			seq[AbstractPolicy]{unfolding ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestamp(reveal getIssuer(immutableHash, immutablePolicyCache)/*unfolding ImmutablePolicyCachePermissions_issuer(immutablePolicyCache) in immutablePolicyCache[immutableHash].immutableIssuerHash*/, rootChain, immutablePolicyCache, policyCache, policyDnsNameCache))
@@ -958,7 +959,8 @@ requires perms > 0
 requires cachePerms > 0
 requires acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
 requires rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
-requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
+requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) && 
+	(forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
     (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 	acc(ImmutablePolicyCachePermissions_issuer(immutablePolicyCache), cachePerms) &&
 	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
@@ -968,11 +970,11 @@ requires (forall str string :: {&immutablePolicyCache[str].policyHashes} str in 
 requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
 requires immutableHash != base64.StdEncoding.EncodeToString(nil) && immutableHash in domain(immutablePolicyCache)
 requires let rc := rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{} in !(len(rc) != 0 && immutableHash == rc[0].immutableHash) 
-requires /*rootChain != nil || !isIssuerNil(immutableHash, immutablePolicyCache) ==>*/ unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache), cachePerms) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestamp(getIssuer(immutableHash, immutablePolicyCache), rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{}, immutablePolicyCache, policyCache, policyDnsNameCache)
-//requires rootChain == nil && isIssuerNil(immutableHash, immutablePolicyCache) ==> unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache), cachePerms) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))}
+requires unfoldAndToAbstractChainFromChain2(resChain, policyDnsNameCache) == seq[AbstractPolicy]{unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, policyCache), cachePerms) in getMinMaxPolicy(immutableHash, immutablePolicyCache, policyCache, policyDnsNameCache, len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))} ++ abstractGetPolicyCertificateChainWithLatestTimestamp(getIssuer(immutableHash, immutablePolicyCache), rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, policyDnsNameCache) : seq[AbstractPolicy]{}, immutablePolicyCache, policyCache, policyDnsNameCache)
 ensures acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
 ensures rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, policyDnsNameCache), perms)
-ensures (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
+ensures (forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
+	(forall str string :: {&immutablePolicyCache[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, policyCache), cachePerms)) &&
     (forall str string :: {&immutablePolicyCache[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 	acc(ImmutablePolicyCachePermissions_issuer(immutablePolicyCache), cachePerms) &&
 	(forall str string :: {&immutablePolicyCache[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&

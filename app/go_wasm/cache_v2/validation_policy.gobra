@@ -203,7 +203,8 @@ requires inPerms > 0
 requires inPerms <= 1
 requires rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, dict(policyDnsNameCache)), inPerms)
 requires acc(ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)), cachePerms)
-requires (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache)), cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
+requires (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
+    (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache)), cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
     (forall str string :: {&dict(immutablePolicyCache)[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 	(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
 	(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
@@ -222,7 +223,8 @@ ensures outPerms <= inPerms
 ensures cachePerms == old(cachePerms)
 ensures rootChain != nil ==> acc(acc_policyCertificateChain(rootChain, dict(policyDnsNameCache)), outPerms)
 ensures acc(ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)), cachePerms)
-ensures (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache)), cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
+ensures (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
+	(forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms) && acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache)), cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
     (forall str string :: {&dict(immutablePolicyCache)[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 	(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
 	(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
@@ -266,8 +268,6 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 	if !ok {
 		return nil, fmt.Errorf("Inconsistent caches: policy with immutable hash %s does not exist", immutableHash), outPerms
 	}
-
-	assume immutableHash != base64.StdEncoding.EncodeToString(nil)
 
 	parentChain, err, tmp := getPolicyCertificateChainWithLatestTimestamp(unfolding acc(ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)), cachePerms) in issuerEntry.immutableIssuerHash, rootChain, inPerms / 2, cachePerms / 2) // inPerms / 2 will decrease the permissions of policies but that's okay, we then know that nothing changes 
 
@@ -328,7 +328,8 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 	invariant immutableHash in domain(dict(immutablePolicyCache))
 	invariant issuerEntry == dict(immutablePolicyCache)[immutableHash]
 	invariant acc(ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)), cachePerms)
-    invariant (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
+    invariant (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) && 
+		(forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
 		(forall str string :: {&dict(immutablePolicyCache)[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 		(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
 		(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
@@ -386,7 +387,8 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		invariant dict(policyDnsNameCache) == oldPolicyDnsNameCache
 		invariant pcEntry == dict(policyCache)[hash]
 		invariant acc(ImmutablePolicyCachePermissions_issuer(dict(immutablePolicyCache)), cachePerms)
-		invariant (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
+		invariant (forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> str != base64.StdEncoding.EncodeToString(nil)) &&
+			(forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyHashes, cachePerms)) &&  // dict needed in trigger to make sure that gobra generates a valid trigger!
 			(forall str string :: {&dict(immutablePolicyCache)[str].timestamp} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].timestamp, cachePerms)) &&
 			(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedCAs} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedCAs, cachePerms)) &&
 			(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.AllowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.AllowedSubdomains, cachePerms)) &&
@@ -545,14 +547,6 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		len(resChain.PolicyCertificates) >= 1 &&
 		(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], outPerms / 2)) &&
 		(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, dict(policyDnsNameCache)), outPerms / 4)))
-/*	ensures acc(minMaxTimestampPcEntry, outPerms /4)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedCAs), outPerms /8)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedSubdomains), outPerms /8)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.DisallowedSubdomains), outPerms /8)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.ExcludedSubdomains), outPerms /8)
-	ensures acc(cache_SPCTs(minMaxTimestampPcEntry.SPCTs), outPerms / 8)
-	ensures acc(policy_IssuerHash(minMaxTimestampPcEntry.IssuerHash), outPerms / 8)
-	ensures minMaxTimestampPcEntry.Domain() in domain(dict(policyDnsNameCache))*/
 	ensures len(resChain.PolicyCertificates) == len(parentChain.PolicyCertificates) + 1 && resChain.PolicyCertificates[0] == minMaxTimestampPcEntry && (forall k int :: {&resChain.PolicyCertificates[k]} 1 <= k && k < len(resChain.PolicyCertificates) ==> resChain.PolicyCertificates[k] == parentChain.PolicyCertificates[k-1])
 	ensures toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache)) == before(toAbstractPolicyFromBlank(minMaxTimestampPcEntry))
 	outline(
@@ -586,7 +580,7 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 			// todo: find trust level
 			TrustLevel: max(parentChain.TrustLevel, 0),
 		}
-		fold acc(acc_inj_chainCertificate(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 1, dict(policyDnsNameCache)/*, resChain*/), outPerms / 4)
+		fold acc(acc_inj_chainCertificate(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 1, dict(policyDnsNameCache)), outPerms / 4)
 	)
 	ghost outPerms = outPerms / 2
 
