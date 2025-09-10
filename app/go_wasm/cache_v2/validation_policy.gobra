@@ -527,6 +527,8 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 	requires acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.DisallowedSubdomains), outPerms /4)
 	requires acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.ExcludedSubdomains), outPerms /4)
 	requires acc(cache_SPCTs(minMaxTimestampPcEntry.SPCTs), outPerms / 4)
+	requires acc(policy_IssuerHash(minMaxTimestampPcEntry.IssuerHash), outPerms / 4)
+	requires minMaxTimestampPcEntry.Domain() in domain(dict(policyDnsNameCache))
 	ensures outPerms == before(outPerms)
 	ensures cachePerms == before(cachePerms)
 	ensures acc(&immutablePolicyCache, cachePerms / 2)
@@ -545,16 +547,18 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		len(resChain.PolicyCertificates) >= 1 &&
 		(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], outPerms / 2)) &&
 		(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, dict(policyDnsNameCache)), outPerms / 4)))
-	ensures acc(minMaxTimestampPcEntry, outPerms /4)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedCAs), outPerms /4) 
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedSubdomains), outPerms /4) 
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.DisallowedSubdomains), outPerms /4)
-	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.ExcludedSubdomains), outPerms /4)
-	ensures acc(cache_SPCTs(minMaxTimestampPcEntry.SPCTs), outPerms / 4)
+/*	ensures acc(minMaxTimestampPcEntry, outPerms /4)
+	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedCAs), outPerms /8)
+	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.AllowedSubdomains), outPerms /8)
+	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.DisallowedSubdomains), outPerms /8)
+	ensures acc(acc_strs(minMaxTimestampPcEntry.PolicyAttributes.ExcludedSubdomains), outPerms /8)
+	ensures acc(cache_SPCTs(minMaxTimestampPcEntry.SPCTs), outPerms / 8)
+	ensures acc(policy_IssuerHash(minMaxTimestampPcEntry.IssuerHash), outPerms / 8)
+	ensures minMaxTimestampPcEntry.Domain() in domain(dict(policyDnsNameCache))*/
 	ensures len(resChain.PolicyCertificates) == len(parentChain.PolicyCertificates) + 1 && resChain.PolicyCertificates[0] == minMaxTimestampPcEntry && (forall k int :: {&resChain.PolicyCertificates[k]} 1 <= k && k < len(resChain.PolicyCertificates) ==> resChain.PolicyCertificates[k] == parentChain.PolicyCertificates[k-1])
-	ensures toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache)) == toAbstractPolicyFromBlank(minMaxTimestampPcEntry)
+	ensures toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache)) == before(toAbstractPolicyFromBlank(minMaxTimestampPcEntry))
 	outline(
-		isDomainRootCertificate := minMaxTimestampPcEntry.Domain() != "" && (len(parentChain.PolicyCertificates) == 0 || (unfolding acc(acc_inj_chainCertificate(parentChain.PolicyCertificates[0], len(parentChain.PolicyCertificates) - 1, dict(policyDnsNameCache)/*, parentChain*/), outPerms) in parentChain.PolicyCertificates[0].Domain()) == "")
+		isDomainRootCertificate := minMaxTimestampPcEntry.Domain() != "" && (len(parentChain.PolicyCertificates) == 0 || (unfolding acc(acc_inj_chainCertificate(parentChain.PolicyCertificates[0], len(parentChain.PolicyCertificates) - 1, dict(policyDnsNameCache)/*, parentChain*/), outPerms / 2) in parentChain.PolicyCertificates[0].Domain()) == "")
 		isDomainRootCertificateParent := minMaxTimestampPcEntry.Domain() == ""
 		domainRootIssuanceTimestamp := parentChain.DomainRootIssuanceTimestamp
 		if isDomainRootCertificate {
