@@ -335,7 +335,7 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.DisallowedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.DisallowedSubdomains, cachePerms)) &&
 		(forall str string :: {&dict(immutablePolicyCache)[str].policyAttributes.ExcludedSubdomains} str in domain(immutablePolicyCache) ==> acc(&immutablePolicyCache[str].policyAttributes.ExcludedSubdomains, cachePerms))
 	invariant forall str string :: {&dict(immutablePolicyCache)[str].policyHashes} str in domain(immutablePolicyCache) && str != immutableHash ==> acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[str].policyHashes, str, dict(policyCache)), cachePerms)
-	invariant let hashes := issuerEntry.policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&hashes[k], dict(policyCache)), cachePerms / 2))
+	invariant let hashes := issuerEntry.policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], cachePerms / 2) && hashes[k] in domain(policyCache))
 	invariant acc(ImmutablePolicyCachePermissions_policyHashes(issuerEntry.policyHashes, immutableHash, dict(policyCache)), cachePerms / 2) // remaining permissions for specification functions
 	invariant acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms)
 	invariant parentChain != nil
@@ -349,9 +349,7 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 	invariant let rc := rootChain != nil ? unfoldAndToAbstractChainFromChain2(rootChain, dict(policyDnsNameCache)) : seq[AbstractPolicy]{} in !(len(rc) != 0 && immutableHash == rc[0].immutableHash) 
 	for i := 0; i < len(issuerEntry.policyHashes); i += 1 {
 		unfold acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 2)
-		unfold acc(ImmutablePolicyCachePermissions_policyHash(&issuerEntry.policyHashes[i], dict(policyCache)), cachePerms / 4)
 		hash := issuerEntry.policyHashes[i]
-		fold acc(ImmutablePolicyCachePermissions_policyHash(&issuerEntry.policyHashes[i], dict(policyCache)), cachePerms / 4)
 	//for i, hash := range issuerEntry.policyHashes {
 
 		pcEntry, ok := policyCache[hash]
@@ -415,9 +413,9 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		invariant j == 0 ==> tLatest == pcEntry.policy.TimeStamp
 		invariant tLatest == findMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp, j, j)
 		invariant acc(ImmutablePolicyCachePermissions_policyHashes(issuerEntry.policyHashes, immutableHash, dict(policyCache)), cachePerms / 2) // remaining permissions for specification functions
-		invariant let hashes := issuerEntry.policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(ImmutablePolicyCachePermissions_policyHash(&hashes[k], dict(policyCache)), cachePerms / 2))
+		invariant let hashes := issuerEntry.policyHashes in (len(hashes) > 0 && forall k int :: {&hashes[k]} 0 <= k && k < len(hashes) ==> acc(&hashes[k], cachePerms / 2) && hashes[k] in domain(policyCache))
 		invariant 0 <= i && i < len(issuerEntry.policyHashes)
-		invariant hash == unfolding acc(ImmutablePolicyCachePermissions_policyHash(&issuerEntry.policyHashes[i], dict(policyCache)), cachePerms / 4) in issuerEntry.policyHashes[i]
+		invariant hash == issuerEntry.policyHashes[i]
 		invariant pcEntry.policy == policyCache[hash].policy
 		invariant i > 0 ==> getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), i, i) == oldMinMaxPolicy
 		invariant rootChain == old(rootChain)
@@ -444,19 +442,19 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 				reveal unfoldAndToAbstractPolicyFromCache(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 0)
 				lemmaGetMinMaxPolicyEmpty(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), outPerms / 4, cachePerms / 4)
 				assert unfoldAndToAbstractPolicyFromCache(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), i) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), i+1, i+1)
-				assert unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], dict(policyCache)), cachePerms / 4) in (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache))) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
-				assert unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], dict(policyCache)), cachePerms / 4) in (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in unfolding acc(cache_policyHashes_policy(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy)) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
-				assert unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], dict(policyCache)), cachePerms / 4) in (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache))) == toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy)
-				assert unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[0], dict(policyCache)), cachePerms / 4) in toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
+				assert (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache))) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
+				assert (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in unfolding acc(cache_policyHashes_policy(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy)) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
+				assert (unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy, immutablePolicyCache[immutableHash].policyHashes[0], dict(policyDnsNameCache))) == toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy)
+				assert toAbstractPolicyFromBlank(policyCache[immutablePolicyCache[immutableHash].policyHashes[0]].policy) == getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), 1, 1)
 			} else {
 				reveal unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
-				assert pcEntry == unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[i], dict(policyCache)), cachePerms / 4) in policyCache[immutablePolicyCache[immutableHash].policyHashes[i]]
+				assert pcEntry == policyCache[immutablePolicyCache[immutableHash].policyHashes[i]]
 				assert unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in (toAbstractPolicyFromCache(pcEntry.policy, hash, dict(policyDnsNameCache)).minMaxTimestamp == unfolding acc(cache_policyHashes_policy(pcEntry.policy, hash, dict(policyDnsNameCache)), outPerms / 4) in unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp))
 				assert tLatest == unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in unfolding acc(cache_policyHashes_policy(pcEntry.policy, hash, dict(policyDnsNameCache)), outPerms / 4) in unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
 				assert tLatest == unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
 				assert unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(pcEntry.policy, hash, dict(policyDnsNameCache)).minMaxTimestamp == tLatest
 				assert toAbstractPolicyFromBlank(minMaxTimestampPcEntry).minMaxTimestamp == minMaxTimestamp
-				assert let curr := unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[i], dict(policyCache)), cachePerms / 4) in unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[i]].policy, immutablePolicyCache[immutableHash].policyHashes[i], dict(policyDnsNameCache))  in
+				assert let curr := unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[i]].policy, immutablePolicyCache[immutableHash].policyHashes[i], dict(policyDnsNameCache))  in
 					curr.minMaxTimestamp.Before(toAbstractPolicyFromBlank(minMaxTimestampPcEntry).minMaxTimestamp)
 				reveal unfoldAndToAbstractPolicyFromCache(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), i)
 				lemmaGetMinMaxPolicyInduction1(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), toAbstractPolicyFromBlank(minMaxTimestampPcEntry), i, outPerms / 4, cachePerms / 4)
@@ -474,13 +472,13 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 		} /*added */ else {
 			reveal unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
 
-			assert pcEntry == unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[i], dict(policyCache)), cachePerms / 4) in policyCache[immutablePolicyCache[immutableHash].policyHashes[i]]
+			assert pcEntry == policyCache[immutablePolicyCache[immutableHash].policyHashes[i]]
 			assert unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in (toAbstractPolicyFromCache(pcEntry.policy, hash, dict(policyDnsNameCache)).minMaxTimestamp == unfolding acc(cache_policyHashes_policy(pcEntry.policy, hash, dict(policyDnsNameCache)), outPerms / 4) in unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp))
 			assert tLatest == unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in unfolding acc(cache_policyHashes_policy(pcEntry.policy, hash, dict(policyDnsNameCache)), outPerms / 4) in unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
 			assert tLatest == unfoldAndFindMaxSPCT(pcEntry.policy.SPCTs, pcEntry.policy.TimeStamp)
 			assert unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(pcEntry.policy, hash, dict(policyDnsNameCache)).minMaxTimestamp == tLatest
 			assert toAbstractPolicyFromBlank(minMaxTimestampPcEntry).minMaxTimestamp == minMaxTimestamp
-			assert let curr := unfolding acc(ImmutablePolicyCachePermissions_policyHash(&immutablePolicyCache[immutableHash].policyHashes[i], dict(policyCache)), cachePerms / 4) in unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[i]].policy, immutablePolicyCache[immutableHash].policyHashes[i], dict(policyDnsNameCache))  in
+			assert let curr := unfolding acc(PolicyCachePermissions(dict(policyCache), dict(immutablePolicyCache), dict(policyDnsNameCache)), outPerms / 4) in toAbstractPolicyFromCache(policyCache[immutablePolicyCache[immutableHash].policyHashes[i]].policy, immutablePolicyCache[immutableHash].policyHashes[i], dict(policyDnsNameCache))  in
 				!curr.minMaxTimestamp.Before(toAbstractPolicyFromBlank(minMaxTimestampPcEntry).minMaxTimestamp)
 					
 			reveal unfoldAndToAbstractPolicyFromCache(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), i)
