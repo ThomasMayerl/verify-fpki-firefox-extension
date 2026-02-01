@@ -584,9 +584,6 @@ func getPolicyCertificateChainWithLatestTimestamp(immutableHash string, rootChai
 	)
 	ghost outPerms = outPerms / 2
 
-	assume resChain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, dict(policyDnsNameCache)))
-	assume resChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, dict(policyDnsNameCache)))
-
 	assert minMaxTimestampPcEntry == resChain.PolicyCertificates[0]
 	assert toAbstractPolicyFromChain(minMaxTimestampPcEntry, len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache)) == toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache))
 	assert toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, dict(policyDnsNameCache)) == unfolding acc(ImmutablePolicyCachePermissions_policyHashes(immutablePolicyCache[immutableHash].policyHashes, immutableHash, dict(policyCache)), cachePerms / 2) in getMinMaxPolicy(immutableHash, dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), len(immutablePolicyCache[immutableHash].policyHashes), len(immutablePolicyCache[immutableHash].policyHashes))
@@ -885,43 +882,47 @@ func findPolicyCertificateChainForDomain(domainVar string, domainRootPolicyCerti
 					fold acc(PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache)), 1/8)
 					return nil, fmt.Errorf("Failed to get policy cert chain with latest timestamp: %s", err), outPerms
 				}
+
 				if chain != nil {
 					reveal abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache))
 					reveal getImmutableHashFromLeafHash(abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache)), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache))
-					/*ghost if finalChain != nil {
+					ghost if finalChain != nil {
 						reveal unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache))
-					}*/
-					//reveal unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
+					}
+					reveal unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
 					assert leafHash == unfolding acc(PolicyDnsNameCachePermissions(dict(policyDnsNameCache), dict(policyCache)), 1/8) in (let lH := policyDnsNameCache[currentDomain] in (unfolding acc(acc_leafHashes(lH, currentDomain, dict(policyCache)), 1/8) in lH[j]))
+
 					if finalChain == nil || (unfolding acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) in (chain.DomainLatestMinMaxTimestamp)).After(unfolding acc(acc_policyCertificateChain(finalChain, dict(policyDnsNameCache)), outPerms / 2) in finalChain.DomainLatestMinMaxTimestamp) {
-						//ghost abstractChain := unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
+						ghost abstractChain := unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
 						
-						/*unfold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
-						assume chain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(abstractChain)
-						fold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) */
-						reveal abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache))
-						reveal getImmutableHashFromLeafHash(abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache)), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache))
-						/*ghost if finalChain != nil {
-							reveal unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache))
-						}*/
-						
-						//assume finalChain != nil ==> unfolding acc(acc_policyCertificateChain(finalChain, dict(policyDnsNameCache)), outPerms / 2) in finalChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)))
-						ghost abstractGetNewestChainWithRootChainInduction1SameSubdomain(chain, finalChain, currentDomain, len(e2ld), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), unfoldAndToAbstractChainFromChain2(domainRootPolicyCertificateChain, dict(policyDnsNameCache)), j, outPerms / 4)
-						finalChain = chain
-					} /* added */ else {
-						//ghost abstractChain := unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
-						reveal abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache))
-						reveal getImmutableHashFromLeafHash(abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache)), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache))
-						/*ghost if finalChain != nil {
-							reveal unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache))
-						}*/
-						
-						/*unfold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
+						unfold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
 						assume chain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(abstractChain)
 						fold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
-						assume finalChain != nil ==> unfolding acc(acc_policyCertificateChain(finalChain, dict(policyDnsNameCache)), outPerms / 2) in finalChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)))*/
+						reveal abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache))
+						reveal getImmutableHashFromLeafHash(abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache)), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache))
+						ghost if finalChain != nil {
+							reveal unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache))
+						}
 						
-						ghost abstractGetNewestChainWithRootChainInduction2SameSubdomain(chain, finalChain, currentDomain, len(e2ld), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), unfoldAndToAbstractChainFromChain2(domainRootPolicyCertificateChain, dict(policyDnsNameCache)), j, outPerms / 4)
+						assume finalChain != nil ==> unfolding acc(acc_policyCertificateChain(finalChain, dict(policyDnsNameCache)), outPerms / 2) in finalChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)))
+						
+						ghost abstractGetNewestChainWithRootChainInduction1SameSubdomain(currentDomain, len(e2ld), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), unfoldAndToAbstractChainFromChain2(domainRootPolicyCertificateChain, dict(policyDnsNameCache)), j, finalChain == nil ? seq[AbstractPolicy]{} : unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)), outPerms / 4)
+						//assume false
+						finalChain = chain
+					} /* added */ else {
+						ghost abstractChain := unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
+						reveal abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache))
+						reveal getImmutableHashFromLeafHash(abstractGetLeafHash(currentDomain, j, dict(policyDnsNameCache), dict(policyCache)), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache))
+						ghost if finalChain != nil {
+							reveal unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache))
+						}
+						
+						unfold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
+						assume chain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(abstractChain)
+						fold acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), outPerms / 2) 
+						assume finalChain != nil ==> unfolding acc(acc_policyCertificateChain(finalChain, dict(policyDnsNameCache)), outPerms / 2) in finalChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)))
+						
+						ghost abstractGetNewestChainWithRootChainInduction2SameSubdomain(currentDomain, len(e2ld), dict(immutablePolicyCache), dict(policyCache), dict(policyDnsNameCache), unfoldAndToAbstractChainFromChain2(domainRootPolicyCertificateChain, dict(policyDnsNameCache)), j, unfoldAndToAbstractChainFromChain2(finalChain, dict(policyDnsNameCache)), outPerms / 4)
 					}
 				}
 			}
@@ -972,11 +973,11 @@ func getNewestChain(chains []*PolicyCertificateChain, ghost perms perm) (res *Po
 			ghost lemmaGetNewestChainBaseCase(abstractChains)
 		} else {
 			chainTime := unfolding acc(acc_policyCertificateChain(chain, dict(policyDnsNameCache)), perms) in chain.DomainRootIssuanceTimestamp
+			assume chainTime == abstractGetDomainRootIssuanceTimestamp(unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache)))
+			newestChainTime := unfolding acc(acc_policyCertificateChain(newestChain, dict(policyDnsNameCache)), perms) in newestChain.DomainRootIssuanceTimestamp
+			assume newestChainTime == abstractGetDomainRootIssuanceTimestamp(unfoldAndToAbstractChainFromChain2(newestChain, dict(policyDnsNameCache)))
 			reveal unfoldAndToAbstractChainFromChain2(newestChain, dict(policyDnsNameCache))
 			reveal unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache))
-			assert chainTime == abstractGetDomainRootIssuanceTimestamp(unfoldAndToAbstractChainFromChain2(chain, dict(policyDnsNameCache)))
-			newestChainTime := unfolding acc(acc_policyCertificateChain(newestChain, dict(policyDnsNameCache)), perms) in newestChain.DomainRootIssuanceTimestamp
-			assert newestChainTime == abstractGetDomainRootIssuanceTimestamp(unfoldAndToAbstractChainFromChain2(newestChain, dict(policyDnsNameCache)))
 			if chainTime.After(newestChainTime) {
 		//if i == 0 || chain.DomainRootIssuanceTimestamp.After(newestChain.DomainRootIssuanceTimestamp) {
 				ghost lemmaGetNewestChainInduction1(abstractChains, i, unfoldAndToAbstractChainFromChain2(newestChain, dict(policyDnsNameCache)))

@@ -62,7 +62,7 @@ pred PolicyCachePermissions(ghost policyCache dict[string]*PolicyCacheEntry, gho
     forall str string :: {policyCache[str]} str in domain(policyCache) ==> 
     acc(policyCache[str]) && 
     PolicyCachePermissions_ImmutableHash(policyCache[str].immutableHash, str, immutablePolicyCache) && // We don't need these invariants in a lot of places -> put into separate predicate to not carry quantifier around
-    cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache)
+    cache_policyHashes_policy(policyCache[str].policy, str, policyDnsNameCache) //acc(policyCache[str].policy, perms) && cache_SPCTs(policyCache[str].policy.SPCTs, perms)
 }
 
 pred PolicyDnsNameCachePermissions(ghost policyDnsNameCache dict[string][]string, ghost policyCache dict[string]*PolicyCacheEntry) {
@@ -73,7 +73,7 @@ pred acc_strs(arr []string) {
 	forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k])
 }
 
-pred acc_inj_chainCertificate(cert *common.PolicyCertificate, i int, ghost policyDnsNameCache dict[string][]string) {
+pred acc_inj_chainCertificate(cert *common.PolicyCertificate, i int, ghost policyDnsNameCache dict[string][]string/*, chain *PolicyCertificateChain*/) {
 	acc(cert) && cert.Domain() in domain(policyDnsNameCache) && cache_SPCTs(cert.SPCTs) && policy_IssuerHash(cert.IssuerHash) && acc_strs(cert.PolicyAttributes.AllowedCAs) && acc_strs(cert.PolicyAttributes.AllowedSubdomains) && acc_strs(cert.PolicyAttributes.DisallowedSubdomains) && acc_strs(cert.PolicyAttributes.ExcludedSubdomains)
 }
 
@@ -82,9 +82,7 @@ pred acc_policyCertificateChain(chain *PolicyCertificateChain, ghost policyDnsNa
 	acc(chain) &&
 	len(chain.PolicyCertificates) >= 1 &&
 	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc(&chain.PolicyCertificates[l])) &&
-	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc_inj_chainCertificate(chain.PolicyCertificates[l], len(chain.PolicyCertificates) - l - 1, policyDnsNameCache)) &&
-	chain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache)) && 
-	chain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(chain.PolicyCertificates, policyDnsNameCache))
+	(forall l int :: {&chain.PolicyCertificates[l]} 0 <= l && l < len(chain.PolicyCertificates) ==> acc_inj_chainCertificate(chain.PolicyCertificates[l], len(chain.PolicyCertificates) - l - 1, policyDnsNameCache))
 } 
 
 pred acc_inj_policyCertificateChain(chain *PolicyCertificateChain, i int, ghost policyDnsNameCache dict[string][]string) {
@@ -814,7 +812,6 @@ func abstractGetNewestChainWithRootChainBaseCase(subdomain string, e2ldLen int, 
 	reveal abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, 0)
 }
 
-/*
 ghost 
 requires perms > 0
 requires e2ldLen <= len(subdomain)
@@ -832,38 +829,6 @@ ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16
 ensures abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1) == (unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache))
 decreases
 func abstractGetNewestChainWithRootChainInduction1SameSubdomain(subdomain string, e2ldLen int, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, rootChain AbstractChain, exclJ int, maxChain AbstractChain, perms perm)  {
-	reveal abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1)
-}
-*/
-
-ghost 
-requires perms > 0
-requires e2ldLen <= len(subdomain)
-requires exclJ >= 0
-requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
-requires finalChain != nil ==> acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms)
-requires acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
-requires subdomain in domain(policyDnsNameCache)
-requires exclJ < abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)
-requires finalChain == nil ==> abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ) == seq[AbstractPolicy]{}
-requires finalChain != nil ==> abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ) == unfoldAndToAbstractChainFromChain2(finalChain, policyDnsNameCache)
-requires (unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)) == unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
-requires finalChain == nil || (unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in (chain.DomainLatestMinMaxTimestamp)).After(unfolding acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms) in finalChain.DomainLatestMinMaxTimestamp)
-ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
-ensures finalChain != nil ==> acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms)
-ensures acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
-ensures subdomain in domain(policyDnsNameCache)
-ensures abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1) == (unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache))
-decreases
-func abstractGetNewestChainWithRootChainInduction1SameSubdomain(chain *PolicyCertificateChain, finalChain *PolicyCertificateChain, subdomain string, e2ldLen int, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, rootChain AbstractChain, exclJ int, perms perm)  {
-	reveal unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
-	if finalChain != nil {
-		reveal unfoldAndToAbstractChainFromChain2(finalChain, policyDnsNameCache)
-	} 
 	reveal abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1)
 }
 
@@ -885,7 +850,6 @@ func abstractGetNewestChainWithRootChainInductionNextSubdomain(subdomain string,
 	reveal abstractGetNewestChainWithRootChain(nextSubdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, 0)
 }
 
-/*
 ghost 
 requires perms > 0
 requires e2ldLen <= len(subdomain)
@@ -903,35 +867,6 @@ ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16
 ensures abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1) == maxChain
 decreases
 func abstractGetNewestChainWithRootChainInduction2SameSubdomain(subdomain string, e2ldLen int, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, rootChain AbstractChain, exclJ int, maxChain AbstractChain, perms perm)  {
-	reveal abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1)
-}*/
-
-ghost 
-requires perms > 0
-requires e2ldLen <= len(subdomain)
-requires exclJ >= 0
-requires finalChain != nil
-requires acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-requires acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-requires acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
-requires acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms)
-requires acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
-requires subdomain in domain(policyDnsNameCache)
-requires exclJ < abstractGetLeafHashesLen(subdomain, policyDnsNameCache, policyCache)
-requires abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ) == unfoldAndToAbstractChainFromChain2(finalChain, policyDnsNameCache)
-requires (unfolding acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8) in abstractGetPolicyCertificateChainWithLatestTimestamp(getImmutableHashFromLeafHash(abstractGetLeafHash(subdomain, exclJ, policyDnsNameCache, policyCache), immutablePolicyCache, policyCache, policyDnsNameCache), rootChain, immutablePolicyCache, policyCache, policyDnsNameCache)) == unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
-requires !((unfolding acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms) in (chain.DomainLatestMinMaxTimestamp)).After(unfolding acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms) in finalChain.DomainLatestMinMaxTimestamp))
-ensures acc(PolicyCachePermissions(policyCache, immutablePolicyCache, policyDnsNameCache), perms)
-ensures acc(ImmutablePolicyCachePermissions(immutablePolicyCache, policyCache), 1/8)
-ensures acc(PolicyDnsNameCachePermissions(policyDnsNameCache, policyCache), 1/16)
-ensures acc(acc_policyCertificateChain(finalChain, policyDnsNameCache), perms)
-ensures acc(acc_policyCertificateChain(chain, policyDnsNameCache), perms)
-ensures subdomain in domain(policyDnsNameCache)
-ensures abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1) == abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ)
-decreases
-func abstractGetNewestChainWithRootChainInduction2SameSubdomain(chain *PolicyCertificateChain, finalChain *PolicyCertificateChain, subdomain string, e2ldLen int, immutablePolicyCache dict[string]*ImmutablePolicyCacheEntry, policyCache dict[string]*PolicyCacheEntry, policyDnsNameCache dict[string][]string, rootChain AbstractChain, exclJ int, perms perm)  {
-	reveal unfoldAndToAbstractChainFromChain2(chain, policyDnsNameCache)
-	reveal unfoldAndToAbstractChainFromChain2(finalChain, policyDnsNameCache)
 	reveal abstractGetNewestChainWithRootChain(subdomain, e2ldLen, immutablePolicyCache, policyCache, policyDnsNameCache, rootChain, exclJ + 1)
 }
 
@@ -982,15 +917,11 @@ requires perms > 0
 requires acc(resChain, perms) &&
 	len(resChain.PolicyCertificates) >= 1 &&
 	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], perms)) &&
-	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms)) &&
-	resChain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, policyDnsNameCache)) &&
-	resChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, policyDnsNameCache))
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
 requires acc(parentChain, perms) &&
 	len(parentChain.PolicyCertificates) >= 1 &&
 	(forall l int :: {&parentChain.PolicyCertificates[l]} 0 <= l && l < len(parentChain.PolicyCertificates) ==> acc(&parentChain.PolicyCertificates[l], perms)) &&
-	(forall l int :: {&parentChain.PolicyCertificates[l]} 0 <= l && l < len(parentChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(parentChain.PolicyCertificates[l], len(parentChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms)) &&
-	parentChain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(parentChain.PolicyCertificates, policyDnsNameCache)) &&
-	parentChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(parentChain.PolicyCertificates, policyDnsNameCache))
+	(forall l int :: {&parentChain.PolicyCertificates[l]} 0 <= l && l < len(parentChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(parentChain.PolicyCertificates[l], len(parentChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
 requires len(resChain.PolicyCertificates) == len(parentChain.PolicyCertificates) + 1
 requires forall k int :: {&resChain.PolicyCertificates[k]} 1 <= k && k < len(resChain.PolicyCertificates) ==> resChain.PolicyCertificates[k] == parentChain.PolicyCertificates[k - 1]
 requires toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, policyDnsNameCache) == policy
@@ -1012,9 +943,7 @@ requires perms > 0
 requires acc(resChain, perms) &&
 	len(resChain.PolicyCertificates) >= 1 &&
 	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(&resChain.PolicyCertificates[l], perms)) &&
-	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms)) &&
-	resChain.DomainRootIssuanceTimestamp == abstractGetDomainRootIssuanceTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, policyDnsNameCache)) &&
-	resChain.DomainLatestMinMaxTimestamp == abstractGetDomainLatestMinMaxTimestamp(toAbstractChainFromChain(resChain.PolicyCertificates, policyDnsNameCache))
+	(forall l int :: {&resChain.PolicyCertificates[l]} 0 <= l && l < len(resChain.PolicyCertificates) ==> acc(acc_inj_chainCertificate(resChain.PolicyCertificates[l], len(resChain.PolicyCertificates) - l - 1, policyDnsNameCache), perms))
 requires len(resChain.PolicyCertificates) == 1
 requires toAbstractPolicyFromChain(resChain.PolicyCertificates[0], len(resChain.PolicyCertificates) - 0 - 1, policyDnsNameCache) == policy
 ensures acc(acc_policyCertificateChain(resChain, policyDnsNameCache), perms)
