@@ -1,0 +1,19 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/util/io.go
+
+package util
+
+import (
+    "fpki/pkg/common"
+)
+
+preserves forall k int :: {&data[k]} 0 <= k && k < len(data) ==> acc(&data[k])
+ensures err == nil ==> (acc(&res.SPCTs) && (forall k int :: {&res.SPCTs[k]} 0 <= k && k < len(res.SPCTs) ==> acc(&res.SPCTs[k])) &&
+acc(&res.IssuerHash) && (forall k int :: {&res.IssuerHash[k]} 0 <= k && k < len(res.IssuerHash) ==> acc(&res.IssuerHash[k])) &&
+acc(&res.TimeStamp) &&
+acc(&res.DomainField) &&
+acc(&res.PolicyAttributes.ExcludedSubdomains) && (forall l int :: {&res.PolicyAttributes.ExcludedSubdomains[l]} 0 <= l && l < len(res.PolicyAttributes.ExcludedSubdomains) ==> acc(&res.PolicyAttributes.ExcludedSubdomains[l])) &&
+acc(&res.PolicyAttributes.DisallowedSubdomains) && (forall l int :: {&res.PolicyAttributes.DisallowedSubdomains[l]} 0 <= l && l < len(res.PolicyAttributes.DisallowedSubdomains) ==> acc(&res.PolicyAttributes.DisallowedSubdomains[l])) &&
+acc(&res.PolicyAttributes.AllowedSubdomains) && (forall l int :: {&res.PolicyAttributes.AllowedSubdomains[l]} 0 <= l && l < len(res.PolicyAttributes.AllowedSubdomains) ==> acc(&res.PolicyAttributes.AllowedSubdomains[l])) &&
+acc(&res.PolicyAttributes.AllowedCAs) && (forall l int :: {&res.PolicyAttributes.AllowedCAs[l]} 0 <= l && l < len(res.PolicyAttributes.AllowedCAs) ==> acc(&res.PolicyAttributes.AllowedCAs[l])))
+func PolicyCertificateFromBytes(data []byte) (res *common.PolicyCertificate, err error) // added parameter names for postcondition

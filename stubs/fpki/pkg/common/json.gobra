@@ -1,0 +1,63 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/json.go
+
+package common
+
+ensures res != nil && forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k]) 
+ensures err == nil // TODO make more precise -> when do we give back error?
+func ToJSON(obj any) (res []byte, err error) // added param names
+
+// We removed FromJSONModifier because Gobra cannot deal with functions as arguments
+requires outPerms > 0
+requires data != nil ==> acc(data) //&& forall k int :: {&opts[k]} 0 <= k && k < len(opts) ==> acc(&opts[k])
+requires forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k], outPerms / 2) && acc(&policyPayloads[k].SPCTs, outPerms / 2) && acc(&policyPayloads[k].IssuerHash, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms / 2) 
+ensures data != nil ==> err == nil // TODO technically this is not correct, we would have to check the data but this has not yet been done
+ensures err == nil ==> acc(&res.SPCTs) && cache_SPCTs(res.SPCTs) &&
+acc(&res.IssuerHash) && policy_IssuerHash(res.IssuerHash) &&
+acc(&res.TimeStamp) &&
+acc(&res.DomainField) &&
+acc(&res.PolicyAttributes.ExcludedSubdomains) && acc_strs(res.PolicyAttributes.ExcludedSubdomains) &&
+acc(&res.PolicyAttributes.DisallowedSubdomains) && acc_strs(res.PolicyAttributes.DisallowedSubdomains) &&
+acc(&res.PolicyAttributes.AllowedSubdomains) && acc_strs(res.PolicyAttributes.AllowedSubdomains) &&
+acc(&res.PolicyAttributes.AllowedCAs) && acc_strs(res.PolicyAttributes.AllowedCAs)
+ensures forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> acc(&policyPayloads[k], outPerms / 2) && acc(&policyPayloads[k].SPCTs, outPerms / 2) && acc(&policyPayloads[k].IssuerHash, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.AllowedCAs, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.AllowedSubdomains, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.DisallowedSubdomains, outPerms / 2) && acc(&policyPayloads[k].PolicyAttributes.ExcludedSubdomains, outPerms / 2) 
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].SPCTs != &res.SPCTs
+ensures err == nil ==> forall k int :: {&policyPayloads[k].SPCTs} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].SPCTs !== res.SPCTs
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].IssuerHash != &res.IssuerHash
+ensures err == nil ==> forall k int :: {&policyPayloads[k].IssuerHash} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].IssuerHash !== res.IssuerHash
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].PolicyAttributes.AllowedCAs != &res.PolicyAttributes.AllowedCAs
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].PolicyAttributes.AllowedSubdomains != &res.PolicyAttributes.AllowedSubdomains
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].PolicyAttributes.DisallowedSubdomains != &res.PolicyAttributes.DisallowedSubdomains
+ensures err == nil ==> forall k int :: {&policyPayloads[k]} 0 <= k && k < len(policyPayloads) ==> &policyPayloads[k].PolicyAttributes.ExcludedSubdomains != &res.PolicyAttributes.ExcludedSubdomains
+ensures err == nil ==> forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedCAs} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].PolicyAttributes.AllowedCAs !== res.PolicyAttributes.AllowedCAs
+ensures err == nil ==> forall k int :: {&policyPayloads[k].PolicyAttributes.AllowedSubdomains} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].PolicyAttributes.AllowedSubdomains !== res.PolicyAttributes.AllowedSubdomains
+ensures err == nil ==> forall k int :: {&policyPayloads[k].PolicyAttributes.DisallowedSubdomains} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].PolicyAttributes.DisallowedSubdomains !== res.PolicyAttributes.DisallowedSubdomains
+ensures err == nil ==> forall k int :: {&policyPayloads[k].PolicyAttributes.ExcludedSubdomains} 0 <= k && k < len(policyPayloads) ==> policyPayloads[k].PolicyAttributes.ExcludedSubdomains !== res.PolicyAttributes.ExcludedSubdomains
+func FromJSON(data []byte, ghost policyPayloads []*PolicyCertificate/*, opts ...FromJSONModifier*/, ghost outPerms perm) (res *PolicyCertificate, err error) // added return param vars + changed any to type because otherwise we cannot grant acc to any type
+
+/*
+type serializableObjectBase struct {
+	O       any  // actual object to Marshal/Unmarshal
+	skipRaw bool // flag controlling JSON copying into PolicyPartBase.Raw
+}
+
+
+type FromJSONModifier func(*serializableObjectBase)*/
+
+// added 
+pred cache_SPCT(spct *SignedPolicyCertificateTimestamp, l int) {
+	acc(spct)
+}
+
+pred cache_SPCTs(arr []SignedPolicyCertificateTimestamp) {
+	forall l int :: {&arr[l]} 0 <= l && l < len(arr) ==> cache_SPCT(&arr[l], l)
+}
+
+pred policy_IssuerHash(issuerHash []byte) {
+	forall k int :: {&issuerHash[k]} 0 <= k && k < len(issuerHash) ==> acc(&issuerHash[k])
+}
+
+pred acc_strs(arr []string) {
+	forall k int :: {&arr[k]} 0 <= k && k < len(arr) ==> acc(&arr[k])
+}
+

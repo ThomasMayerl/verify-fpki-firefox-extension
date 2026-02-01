@@ -1,0 +1,14 @@
+// Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/encoding/json/encode.go
+
+package json
+
+// requires acc(v) // TODO WHY DOES THIS NOT WORK?
+ensures res != nil
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+ensures err == nil // TODO How to do this better
+func Marshal(v any) (res []byte, err error) // added return param names

@@ -1,0 +1,21 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/ids.go
+
+// In the meantime, *SHA256Output got replaced by SHA256Output
+
+package common
+
+requires forall k int :: {&IDs[k]} 0 <= k && k < len(IDs) ==> acc(&IDs[k], 1/2) && acc(IDs[k], 1/2)
+ensures len(IDs) == old(len(IDs))
+ensures len(res) == len(IDs)
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+ensures forall k int :: {&IDs[k]} 0 <= k && k < len(IDs) ==> acc(&IDs[k], 1/2) && acc(IDs[k], 1/2)// here we copy so we retain the source permissions? 
+func IDsToBytes(IDs []*([SHA256Size]byte)) (res []byte) // Added return param name
+//func IDsToBytes(IDs []*SHA256Output) []byte
+
+requires forall k int :: {&buff[k]} 0 <= k && k < len(buff) ==> acc(&buff[k])
+ensures len(buff) == old(len(buff))
+ensures len(res) == len(buff)
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k]) && acc(res[k]) // here we don't copy so we don't retain the source permissions? 
+// TODO Crashes with type alias //func BytesToIDs(buff []byte) (res []*SHA256Output) // Added return param name
+func BytesToIDs(buff []byte) (res []*([SHA256Size]byte))

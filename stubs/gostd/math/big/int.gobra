@@ -1,0 +1,13 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/math/big/int.go
+
+package big
+
+type Int struct {
+	neg bool // sign
+	abs nat  // absolute value of the integer
+}

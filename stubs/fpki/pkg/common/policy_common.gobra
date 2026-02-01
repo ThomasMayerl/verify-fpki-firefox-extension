@@ -1,0 +1,16 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/policy_common.go
+
+package common
+
+// MarshallableDocumentBase is used to read and write document from and to json files.
+// If changing the name of the field, check the file json.go where we introspect for it.
+type MarshallableDocumentBase struct {
+	JSONField []byte `json:"-"` // omit from JSON (un)marshaling
+}
+
+// PolicyPartBase is the common type to all policy documents.
+type PolicyPartBase struct {
+	MarshallableDocumentBase
+	Version int `json:",omitempty"`
+}

@@ -1,0 +1,15 @@
+// Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/encoding/json/decode.go
+
+package json
+
+// TODO THIS DOES NOT WORK BECAUSE WE CANNOT GIVE ACCESS ON ANY IN GOBRA
+/*
+requires forall k int :: {&data[k]} 0 <= k && k < len(data) ==> acc(&data[k])
+ensures data != nil && v != nil ==> acc(v) // technically this only holds if v is a pointer but we cannot check that? 
+// technically there is also more conditions on data but this is a TODO for later
+func Unmarshal(data []byte, v any) error */

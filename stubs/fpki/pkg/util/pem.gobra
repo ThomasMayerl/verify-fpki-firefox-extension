@@ -1,0 +1,11 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/util/pem.go
+
+package util
+
+import (
+    "crypto/rsa"
+)
+
+ensures acc(res) // TODO key must be correctly encoded?
+func DERBase64ToRSAPublic(base64PubKey string) (res *rsa.PublicKey, err error) // added return param names

@@ -1,0 +1,19 @@
+// Copyright 2021 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/crypto/x509/parser.go
+
+package x509
+
+// ParseCertificate parses a single certificate from the given ASN.1 DER data.
+//
+// Before Go 1.23, ParseCertificate accepted certificates with negative serial
+// numbers. This behavior can be restored by including "x509negativeserial=1" in
+// the GODEBUG environment variable.
+
+requires der != nil ==> acc(der)
+ensures acc(res) && err == nil // TODO technically this is not enough. der must be encoded in a special way but this has not been done yet
+//ensures err != nil ==> err.ErrorMem()
+func ParseCertificate(der []byte) (res *Certificate, err error) // added return param names

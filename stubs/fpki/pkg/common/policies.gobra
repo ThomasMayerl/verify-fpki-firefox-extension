@@ -1,0 +1,160 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/policies.go
+package common
+
+import (
+    "crypto/x509"
+    "time"
+	"strings"
+)
+
+type PolicyAttributeDomainValidityResult int
+
+const (
+	PolicyAttributeDomainAllowed       PolicyAttributeDomainValidityResult = iota
+	PolicyAttributeDomainDisallowed                                        = iota
+	PolicyAttributeDomainExcluded                                          = iota
+	PolicyAttributeDomainNotApplicable                                     = iota
+)
+
+// PolicyAttributes is a domain policy that specifies what is or not acceptable for a domain.
+type PolicyAttributes struct {
+	// List of CA subject names allowed to issue certificates for this domain and subdomains. The
+	// string representation is according to the golang x509 library
+	// golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
+	AllowedCAs []string `json:",omitempty"`
+
+	// The following three attributes specify which subdomains are allowed and which are excluded
+	// (i.e., policies do not apply to these subdomains). Only one of these attributes is allowed to
+	// be set to the wildcard value "*" and covers all domains that are not covered by other
+	// attributes. No subdomain name can be covered by more than one attribute (including the
+	// wildcard value). Only single labels without "." can be specified.
+
+	// This attribute lists subdomains that are allowed
+	AllowedSubdomains []string `json:",omitempty"`
+
+	// This attribute lists subdomains that are not allowed
+	DisallowedSubdomains []string `json:",omitempty"`
+
+	// This attribute lists sudomains for which no policy applies
+	ExcludedSubdomains []string `json:",omitempty"`
+}
+
+func (a PolicyAttributes) ValidateAttributes() error 
+
+
+// Gobra does not support Generics. Thus, we can not use the Contains function from slices.
+ghost 
+requires acc(s)
+decreases
+pure func Contains(s []string, e string) (res bool) {
+	return exists k int :: {&s[k]} 0 <= k && k < len(s) && s[k] == e
+}
+
+// added
+ghost
+requires acc(a.AllowedSubdomains)
+requires acc(a.DisallowedSubdomains)
+requires acc(a.ExcludedSubdomains)
+opaque
+decreases
+pure func DomainValiditySpec(a PolicyAttributes, policyAttributeDomain string, domainVar string) (res PolicyAttributeDomainValidityResult) {
+	return (let polDomain := strings.GhostCutSuffix(policyAttributeDomain, ".") in (let dns := strings.GhostCutSuffix(domainVar, ".") in (
+		let subdomain := strings.GhostCutSuffix(dns, "."+polDomain) in (
+			let subdomains := strings.GhostSplit(subdomain, ".") in (
+				let target := subdomains[len(subdomains) - 1] in (
+					Contains(a.AllowedSubdomains, target) ? PolicyAttributeDomainAllowed : (
+						Contains(a.DisallowedSubdomains, target) ? PolicyAttributeDomainDisallowed : (
+							Contains(a.ExcludedSubdomains, target) ? PolicyAttributeDomainExcluded : (
+								Contains(a.DisallowedSubdomains, "*") ? PolicyAttributeDomainDisallowed : PolicyAttributeDomainAllowed)))))))))
+}
+
+requires perms > 0
+requires acc(a.AllowedCAs, perms)
+requires acc(a.AllowedSubdomains, perms)
+requires acc(a.DisallowedSubdomains, perms)
+requires acc(a.ExcludedSubdomains, perms)
+ensures acc(a.AllowedCAs, perms)
+ensures acc(a.AllowedSubdomains, perms)
+ensures acc(a.DisallowedSubdomains, perms)
+ensures acc(a.ExcludedSubdomains, perms)
+ensures res == PolicyAttributeDomainAllowed || res == PolicyAttributeDomainDisallowed || res == PolicyAttributeDomainExcluded
+ensures res == DomainValiditySpec(a, policyAttributeDomain, domainVar)
+/*ensures (res == PolicyAttributeDomainAllowed || res == PolicyAttributeDomainExcluded) ==> (let polDomain := strings.GhostCutSuffix(policyAttributeDomain, ".") in (let dns := strings.GhostCutSuffix(domainVar, ".") in (
+		let subdomain := strings.GhostCutSuffix(dns, "."+polDomain) in (
+			let subdomains := strings.GhostSplit(subdomain, ".") in (
+				let target := subdomains[len(subdomains) - 1] in (
+					Contains(a.AllowedCAs, target) || (
+						!Contains(a.DisallowedSubdomains, target) && (Contains(a.ExcludedSubdomains, target) /* TODO IS THIS REALLY WHAT EXCLUDED IS FOR? *//*|| !(Contains(a.DisallowedSubdomains, "*"))))))))))
+ensures (res == PolicyAttributeDomainDisallowed) ==> !(let polDomain := strings.GhostCutSuffix(policyAttributeDomain, ".") in (let dns := strings.GhostCutSuffix(domainVar, ".") in (
+		let subdomain := strings.GhostCutSuffix(dns, "."+polDomain) in (
+			let subdomains := strings.GhostSplit(subdomain, ".") in (
+				let target := subdomains[len(subdomains) - 1] in (
+					Contains(a.AllowedCAs, target) || (
+						!Contains(a.DisallowedSubdomains, target) && (Contains(a.ExcludedSubdomains, target) /* TODO IS THIS REALLY WHAT EXCLUDED IS FOR? *//* || !(Contains(a.DisallowedSubdomains, "*"))))))))))
+
+/*ensures (res == PolicyAttributeDomainAllowed || res == PolicyAttributeDomainExcluded) ==> validityOfDomain(
+	AbstractPolicy{
+		AllowedCAs: toSeq(a.AllowedCAs),
+		AllowedSubdomains: toSeq(a.AllowedSubdomains),
+		DisallowedSubdomains: toSeq(a.DisallowedSubdomains),
+		ExcludedSubdomains: toSeq(a.ExcludedSubdomains),
+		Domain: policyAttributeDomain,
+	}, AbstractCertificateChainInfo{
+		DNSName: domainVar,
+	})
+ensures res == PolicyAttributeDomainDisallowed ==> !validityOfDomain(
+	AbstractPolicy{
+		AllowedCAs: toSeq(a.AllowedCAs),
+		AllowedSubdomains: toSeq(a.AllowedSubdomains),
+		DisallowedSubdomains: toSeq(a.DisallowedSubdomains),
+		ExcludedSubdomains: toSeq(a.ExcludedSubdomains),
+		Domain: policyAttributeDomain,
+	}, AbstractCertificateChainInfo{
+		DNSName: domainVar,
+	})*/
+func (a PolicyAttributes) CheckDomainValidity(policyAttributeDomain, domainVar string, ghost perms perm) (res PolicyAttributeDomainValidityResult) // Added return param name
+
+type PolicyCertificateBase struct {
+	/*PolicyPartBase
+	SerialNumberField int    `json:"SerialNumber,omitempty"`*/
+	DomainField       string `json:"Domain,omitempty"`
+}
+
+type PolicyCertificateFields struct {
+	PolicyCertificateBase
+	/*NotBefore          time.Time          `json:",omitempty"`
+	NotAfter           time.Time          `json:",omitempty"`
+	CanIssue           bool               `json:",omitempty"`
+	CanOwn             bool               `json:",omitempty"`
+	PublicKey          []byte             `json:",omitempty"`
+	PublicKeyAlgorithm PublicKeyAlgorithm `json:",omitempty"`
+	SignatureAlgorithm SignatureAlgorithm `json:",omitempty"`*/
+	TimeStamp          time.Time          `json:",omitempty"`
+	PolicyAttributes   PolicyAttributes   `json:",omitempty"`
+	/*OwnerSignature     []byte             `json:",omitempty"`
+	OwnerHash          []byte             `json:",omitempty"`*/
+}
+
+type PolicyCertificate struct {
+	PolicyCertificateFields
+	/*IssuerSignature []byte                             `json:",omitempty"`*/
+	IssuerHash      []byte                             `json:",omitempty"`
+	SPCTs           []SignedPolicyCertificateTimestamp `json:",omitempty"`
+}
+
+decreases
+pure func (o PolicyCertificateBase) Domain() string 
+
+// added
+// from Gobra tutorial at https://github.com/viperproject/gobra/blob/master/docs/tutorial.md
+ghost
+requires forall j int :: 0 <= j && j < len(s) ==> acc(&s[j])
+ensures  len(res) == len(s)
+ensures  forall j int :: {s[j]} {res[j]} 0 <= j && j < len(s) ==> s[j] == res[j]
+decreases len(s)
+opaque
+pure func toSeq(s []string) (res seq[string]) {
+	return (len(s) == 0 ? seq[string]{} :
+		toSeq(s[:len(s)-1]) ++ seq[string]{s[len(s) - 1]})
+}

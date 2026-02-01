@@ -1,0 +1,12 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/hasher.go
+
+package common
+
+const SHA256Size = 32
+
+type SHA256Output [SHA256Size]byte
+
+requires forall k int :: {&data[k]} 0 <= k && k < len(data) ==> acc(&data[k])
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func SHA256Hash(data ...[]byte) (res []byte) // added return param name

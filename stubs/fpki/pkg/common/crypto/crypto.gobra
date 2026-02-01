@@ -1,0 +1,30 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/crypto/crypto.go
+
+package crypto
+
+import (
+    "fpki/pkg/common"
+    "crypto/rsa"
+)
+
+// added; preconditions are still missing, same as for actual method below
+ghost
+ensures p != nil ==> len(res) > 0
+decreases
+pure func abstractComputeHashAsSigner(p *common.PolicyCertificate) (res seq[byte])
+
+// ComputeHashAsSigner computes the bytes of the policy certificate as being an owner certificate.
+// This means: it serializes it but without SPCTs or issuer signature, and computes its sha256.
+decreases
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(res) // still misses precondition that no error can be thrown
+ensures BytesToSeq(res) == abstractComputeHashAsSigner(p)
+ensures err == nil
+func ComputeHashAsSigner(p *common.PolicyCertificate) (res []byte, err error) // added return parameter names
+
+func VerifySignedBytes(b []byte, signature []byte, key *rsa.PublicKey) error
+
+requires policyPerms > 0
+preserves acc(issuerPolCert, policyPerms)
+preserves acc(childPolCert, policyPerms)
+func VerifyIssuerSignature(issuerPolCert *common.PolicyCertificate, childPolCert *common.PolicyCertificate, ghost policyPerms perm) error

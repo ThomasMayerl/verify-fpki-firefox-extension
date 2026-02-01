@@ -1,0 +1,66 @@
+// Copyright 2020 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/embed/embed.go
+
+package embed
+
+import (
+    "io/fs"
+)
+
+type FS struct {
+	// The compiler knows the layout of this struct.
+	// See cmd/compile/internal/staticdata's WriteEmbed.
+	//
+	// The files list is sorted by name but not by simple string comparison.
+	// Instead, each file's name takes the form "dir/elem" or "dir/elem/".
+	// The optional trailing slash indicates that the file is itself a directory.
+	// The files list is sorted first by dir (if dir is missing, it is taken to be ".")
+	// and then by base, so this list of files:
+	//
+	//	p
+	//	q/
+	//	q/r
+	//	q/s/
+	//	q/s/t
+	//	q/s/u
+	//	q/v
+	//	w
+	//
+	// is actually sorted as:
+	//
+	//	p       # dir=.    elem=p
+	//	q/      # dir=.    elem=q
+	//	w/      # dir=.    elem=w
+	//	q/r     # dir=q    elem=r
+	//	q/s/    # dir=q    elem=s
+	//	q/v     # dir=q    elem=v
+	//	q/s/t   # dir=q/s  elem=t
+	//	q/s/u   # dir=q/s  elem=u
+	//
+	// This order brings directory contents together in contiguous sections
+	// of the list, allowing a directory read to use binary search to find
+	// the relevant sequence of entries.
+	files *[]file
+}
+
+// ReadDir reads and returns the entire named directory.
+ensures err == nil ==> forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k]) && res[k] != nil
+func (f FS) ReadDir(name string) (res []fs.DirEntry, err error) // added param names
+
+// ReadFile reads and returns the content of the named file.
+ensures err == nil ==> forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+func (f FS) ReadFile(name string) (res []byte, err error) // added param names
+
+// A file is a single file in the FS.
+// It implements fs.FileInfo and fs.DirEntry.
+type file struct {
+	// The compiler knows the layout of this struct.
+	// See cmd/compile/internal/staticdata's WriteEmbed.
+	name string
+	data string
+	hash [16]byte // truncated SHA256 hash
+}

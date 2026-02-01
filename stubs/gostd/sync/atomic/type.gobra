@@ -1,0 +1,30 @@
+// Copyright 2022 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/sync/atomic/type.go
+
+package atomic
+
+// A Bool is an atomic boolean value.
+// The zero value is false.
+type Bool struct {
+	_ noCopy
+	v uint32
+}
+
+// An Int32 is an atomic int32. The zero value is zero.
+type Int32 struct {
+	_ noCopy
+	v int32
+}
+
+// noCopy may be added to structs which must not be copied
+// after the first use.
+//
+// See https://golang.org/issues/8005#issuecomment-190753527
+// for details.
+//
+// Note that it must not be embedded, due to the Lock and Unlock methods.
+type noCopy struct{}

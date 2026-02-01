@@ -1,0 +1,11 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/mapserver/trie/trie_merkle_proof.go
+
+package trie
+
+// VerifyInclusion verifies that key/value is included in the trie with latest root
+func VerifyInclusion(root []byte, ap [][]byte, key, value []byte) bool
+
+// VerifyNonInclusion verifies a proof of non inclusion,
+// Returns true if the non-inclusion is verified
+func VerifyNonInclusion(root []byte, ap [][]byte, key, value, proofKey []byte) bool

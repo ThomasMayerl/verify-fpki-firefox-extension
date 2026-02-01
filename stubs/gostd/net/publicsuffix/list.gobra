@@ -1,0 +1,11 @@
+// Copyright 2012 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Signatures for the public declarations in file
+// https://go.googlesource.com/net/+/refs/heads/master/publicsuffix/list.go
+
+package publicsuffix
+
+decreases
+pure func EffectiveTLDPlusOne(domainVar string) (string) // renamed domain to domainVar for Gobra; also removed error for Gobra

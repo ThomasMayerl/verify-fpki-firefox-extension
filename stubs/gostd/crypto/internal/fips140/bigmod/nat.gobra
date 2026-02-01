@@ -1,0 +1,35 @@
+// Copyright 2021 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/crypto/internal/fips140/bigmod/nat.go
+
+package bigmod
+
+// Nat represents an arbitrary natural number
+//
+// Each Nat has an announced length, which is the number of limbs it has stored.
+// Operations on this number are allowed to leak this length, but will not leak
+// any information about the values contained in those limbs.
+type Nat struct {
+	// limbs is little-endian in base 2^W with W = bits.UintSize.
+	limbs []uint
+}
+
+// Modulus is used for modular arithmetic, precomputing relevant constants.
+//
+// A Modulus can leak the exact number of bits needed to store its value
+// and is stored without padding. Its actual value is still kept secret.
+type Modulus struct {
+	// The underlying natural number for this modulus.
+	//
+	// This will be stored without any padding, and shouldn't alias with any
+	// other natural number being used.
+	nat *Nat
+
+	// If m is even, the following fields are not set.
+	odd   bool
+	m0inv uint // -nat.limbs[0]⁻¹ mod _W
+	rr    *Nat // R*R for montgomeryRepresentation
+}

@@ -1,0 +1,12 @@
+// Copyright 2018 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/fmt/errors.go
+
+package fmt
+
+ensures res != nil
+ensures res.ErrorMem()
+func Errorf(format string, a ...any) (res error) // added name to return param for reference in ensures clause

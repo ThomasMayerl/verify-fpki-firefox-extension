@@ -1,0 +1,25 @@
+// Signatures for the public declarations in file
+// https://github.com/netsec-ethz/fpki/blob/master/pkg/common/embedded_policies.go
+package common
+
+import (
+    "bytes"
+    "time"
+)
+
+type EmbeddedPolicyBase struct {
+	PolicyPartBase
+}
+
+// SignedEntryTimestamp is common to all timestamps returned by a policy log server.
+type SignedEntryTimestamp struct {
+	EmbeddedPolicyBase
+	LogID     []byte    `json:",omitempty"` // SHA256 of public key of CT log server.
+	AddedTS   time.Time `json:",omitempty"` // When it was added to the CT log server.
+	Signature []byte    `json:",omitempty"` // Using public key of CT log server.
+}
+
+// SignedPolicyCertificateTimestamp is a signed policy certificate timestamp.
+type SignedPolicyCertificateTimestamp struct {
+	SignedEntryTimestamp
+}

@@ -1,0 +1,14 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/encoding/asn1/asn1.go
+
+package asn1
+
+// An ObjectIdentifier represents an ASN.1 OBJECT IDENTIFIER.
+type ObjectIdentifier []int
+
+// Equal reports whether oi and other represent the same identifier.
+func (oi ObjectIdentifier) Equal(other ObjectIdentifier) bool

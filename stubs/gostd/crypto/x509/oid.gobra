@@ -1,0 +1,13 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/crypto/x509/oid.go
+
+package x509
+
+// An OID represents an ASN.1 OBJECT IDENTIFIER.
+type OID struct {
+	der []byte
+}

@@ -1,0 +1,52 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/encoding/base64/base64.go
+
+package base64
+
+// An Encoding is a radix 64 encoding/decoding scheme, defined by a
+// 64-character alphabet. The most common encoding is the "base64"
+// encoding defined in RFC 4648 and used in MIME (RFC 2045) and PEM
+// (RFC 1421).  RFC 4648 also defines an alternate encoding, which is
+// the standard encoding with - and _ substituted for + and /.
+type Encoding struct {
+	encode    [64]byte   // mapping of symbol index to symbol byte value
+	decodeMap [256]uint8 // mapping of symbol byte value to symbol index
+	padChar   rune
+	strict    bool
+}
+
+// StdEncoding is the standard base64 encoding, as defined in RFC 4648.
+var StdEncoding = NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+
+// added
+ghost
+ensures len(src) == 0 ==> res == ""
+ensures len(src) != 0 ==> res != ""
+decreases
+pure func (enc *Encoding) AbstractEncodeToString(src seq[byte]) (res string)
+
+// EncodeToString returns the base64 encoding of src.
+requires src != nil ==> forall k int :: {&src[k]} 0 <= k && k < len(src) ==> acc(&src[k])
+ensures res == enc.AbstractEncodeToString(BytesToSeq(src))
+decreases
+pure func (enc *Encoding) EncodeToString(src []byte) (res string) // added return param name
+
+// DecodeString returns the bytes represented by the base64 string s.
+ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+ensures err == nil && res != nil // TODO is this correct?
+func (enc *Encoding) DecodeString(s string) (res []byte, err error) // added return parameter names
+
+// NewEncoding returns a new padded Encoding defined by the given alphabet,
+// which must be a 64-byte string that contains unique byte values and
+// does not contain the padding character or CR / LF ('\r', '\n').
+// The alphabet is treated as a sequence of byte values
+// without any special treatment for multi-byte UTF-8.
+// The resulting Encoding uses the default padding character ('='),
+// which may be changed or disabled via [Encoding.WithPadding].
+decreases
+mayInit
+func NewEncoding(encoder string) *Encoding

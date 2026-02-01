@@ -1,0 +1,1 @@
+The stubs in this directory have been fetched from the Gobra project (https://github.com/viperproject/gobra). Additional stubs were added on demand.

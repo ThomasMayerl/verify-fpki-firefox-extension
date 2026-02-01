@@ -1,0 +1,41 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/hash/hash.go
+
+package hash
+
+// Manually copied from package io, as Gobra does not yet support imported types as embedded fields
+// This definition comes from
+// https://github.com/golang/go/blob/master/src/io/io.go
+type Writer interface {
+	preserves forall k int :: {&p[k]} 0 <= k && k < len(p) ==> acc(&p[k])
+	Write(p []byte) (n int, err error)
+}
+
+type Hash interface {
+	// Write (via the embedded io.Writer interface) adds more data to the running hash.
+	// It never returns an error.
+	Writer // This now references the Writer from above instead of io.Writer
+
+	// Sum appends the current hash to b and returns the resulting slice.
+	// It does not change the underlying hash state.
+	requires b != nil ==> forall k int :: {&b[k]} 0 <= k && k < len(b) ==> acc(&b[k])
+	ensures forall k int :: {&res[k]} 0 <= k && k < len(res) ==> acc(&res[k])
+	ensures len(res) > 0 // TODO IS THIS CORRECT?
+	Sum(b []byte) (res []byte) // added name to result param
+
+	// Reset resets the Hash to its initial state.
+	Reset()
+
+	// Size returns the number of bytes Sum will return.
+	Size() int
+
+	// BlockSize returns the hash's underlying block size.
+	// The Write method must be able to accept any amount
+	// of data, but it may operate more efficiently if all writes
+	// are a multiple of the block size.
+	BlockSize() int
+}

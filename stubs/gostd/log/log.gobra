@@ -1,0 +1,43 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in https://golang.org/LICENSE
+
+// Signatures for the public declarations in file
+// https://github.com/golang/go/blob/master/src/log/log.go
+
+package log
+
+import (
+	"sync/atomic"
+	"io"
+	"sync"
+)
+
+// A Logger represents an active logging object that generates lines of
+// output to an [io.Writer]. Each logging operation makes a single call to
+// the Writer's Write method. A Logger can be used simultaneously from
+// multiple goroutines; it guarantees to serialize access to the Writer.
+type Logger struct {
+	outMu sync.Mutex
+	out   io.Writer // destination for output
+    prefix *string
+	// changed from the following line because Gobra does not yet support generics
+    //prefix    atomic.Pointer[string] // prefix on each line to identify the logger (but see Lmsgprefix)
+	flag      atomic.Int32           // properties
+	isDiscard atomic.Bool
+}
+
+// Fatal is equivalent to [Print] followed by a call to [os.Exit](1).
+ensures false
+func Fatal(v ...any)
+
+// Fatalf is equivalent to [Printf] followed by a call to [os.Exit](1).
+ensures false
+func Fatalf(format string, v ...any) 
+
+// Printf calls Output to print to the standard logger.
+// Arguments are handled in the manner of [fmt.Printf].
+func Printf(format string, v ...any)
+
+// Panicf is equivalent to [Printf] followed by a call to panic().
+func Panicf(format string, v ...any)
